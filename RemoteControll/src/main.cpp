@@ -8,6 +8,7 @@
 // ----------------------------------------------------------------------------
 
 #include "vex.h"
+#include <cmath>
 
 using namespace vex;
 
@@ -20,160 +21,176 @@ motor rightMotorA(PORT10, ratio18_1, true);
 motor rightMotorB(PORT20, ratio18_1, true);
 motor_group right_motors(rightMotorA, rightMotorB);
 
+motor motor1(PORT16, ratio18_1, false);
+
+inertial inertial1(PORT17);
+
 controller controller_1(primary);
 
-void straight(double target_inches, double speed = 50) {
+void straight(double target_inches, double max_speed = 50) {
+  double time_elapsed = 0.0;
+  // Reset motor encoders
   left_motors.setPosition(0, degrees);
   right_motors.setPosition(0, degrees);
 
-  double target_inches_corrected = target_inches * (20.0 / 48.0);
-  double target_degrees = (target_inches_corrected / 12.566) * 360.0;
+  // --- Constants ---
+  const double wheel_circumference = 12.566; // 4" wheel
+  const double gear_ratio = 20.0 / 48.0;     // external gearing
+  const double target_degrees = (target_inches * gear_ratio / wheel_circumference) * 360.0;
 
-  double Kp = 0.08;
-  double Kd = 0;
-  int x = 0;
+  // --- PID Gains ---
+  double Kp_dist = 0.325; // forward PID proportional
+  double Ki_dist = 0.009; // small integral term for bias
+  double Kd_dist = 0.038;  // derivative for overshoot control
 
-  double ramp_speed = 0;
-  double ramp_step = 0.5;
+  double Kp_drift = 0.300; // drift correction proportional
+  double Kd_drift = 0.042; // drift derivative
 
-  double dt = 0.0075;
-  double prev_error = 0;
+  // --- PID State ---
+  double dist_error_prev = 0;
+  double dist_integral = 0;
 
-  double tolerance = 10;
+  double drift_error_prev = 0;
+
+  // --- Control ---
+  double slew_rate = 2.0; // % per loop
+  double output = 0;
+
+  double dt = 0.02;
   int stable_count = 0;
-  int required_stable_cycles = 1;
+  const int required_stable_cycles = 5;
+  const double tolerance = 10; // degrees
 
   while (stable_count < required_stable_cycles) {
-    if (ramp_speed < speed) {
-      ramp_speed += ramp_step;
-      if (ramp_speed > speed) ramp_speed = speed;
-    }
+    // --- Positions ---
+    double left_pos = left_motors.position(degrees);
+    double right_pos = right_motors.position(degrees);
+    double avg_pos = (left_pos + right_pos) / 2.0;
 
-    if (((left_motors.position(degrees) + right_motors.position(degrees)) / 2.0) >
-        (fabs(target_degrees) - 60)) {
-      if (ramp_speed >= 10) {
-        ramp_speed -= ramp_step;
-      }
-    }
+    // --- Distance PID ---
+    double dist_error = target_degrees - avg_pos;
+    dist_integral += dist_error * dt;
+    double dist_derivative = (dist_error - dist_error_prev) / dt;
+    dist_error_prev = dist_error;
 
-    double error = left_motors.position(degrees) - right_motors.position(degrees);
-    double derivative = (error - prev_error) / dt;
-    prev_error = error;
-    double avg_pos = (left_motors.position(degrees) - right_motors.position(degrees)) / 2.0;
+    double dist_output = (Kp_dist * dist_error) + (Ki_dist * dist_integral) + (Kd_dist * dist_derivative);
 
-    Brain.Screen.print("%f |", error);
+    // --- Slew Rate ---
+    if (dist_output > output + slew_rate) output += slew_rate;
+    else if (dist_output < output - slew_rate) output -= slew_rate;
+    else output = dist_output;
 
-    double correction = Kp * error + Kd * derivative;
-    double left_speed = ramp_speed - correction;
-    double right_speed = ramp_speed + correction;
+    // Clamp output
+    if (output > max_speed) output = max_speed;
+    if (output < -max_speed) output = -max_speed;
 
-    if (left_speed > 100) left_speed = 100;
-    if (left_speed < -100) left_speed = -100;
-    if (right_speed > 100) right_speed = 100;
-    if (right_speed < -100) right_speed = -100;
+    // --- Drift Correction ---
+    double drift_error = left_pos - right_pos;
+    double drift_derivative = (drift_error - drift_error_prev) / dt;
+    drift_error_prev = drift_error;
 
-    directionType left_direction = (left_speed >= 0) ? forward : reverse;
-    directionType right_direction = (right_speed >= 0) ? forward : reverse;
+    double drift_correction = ((Kp_drift * drift_error) + (Kd_drift * drift_derivative));
 
-    left_motors.spin(left_direction, fabs(left_speed), percent);
-    right_motors.spin(right_direction, fabs(right_speed), percent);
+    // --- Motor Speeds ---
+    double left_speed = output - drift_correction;
+    double right_speed = output + drift_correction;
 
-    bool left_pos_close = fabs(left_motors.position(degrees) - target_degrees) < tolerance;
-    bool right_pos_close = fabs(right_motors.position(degrees) - target_degrees) < tolerance;
+    left_motors.spin((left_speed >= 0) ? forward : reverse, fabs(left_speed), percent);
+    right_motors.spin((right_speed >= 0) ? forward : reverse, fabs(right_speed), percent);
 
-    if (left_pos_close && right_pos_close) {
-      stable_count++;
-    } else {
-      stable_count = 0;
-    }
+    // --- Exit Condition ---
+    if (fabs(dist_error) < tolerance) stable_count++;
+    else stable_count = 0;
 
-    // --- Draw error on screen as a vertical line ---
-    int y_center = 120;
-    double scale = 2.75;
-    int y = (int)(y_center - (avg_pos) * scale);
-    if (y < 0) y = 0;
-    if (y > 239) y = 239;
-
-    // Draw X-axis (error = 0 line)
-    if (x == 0) {
-      for (int xi = 0; xi < 480; xi++) {
-        Brain.Screen.drawPixel(xi, y_center);
-      }
-    }
-
-    double target_error = target_degrees;
-    int y_target = (int)(y_center - (target_error) * scale);
-    if (y_target < 0) y_target = 0;
-    if (y_target > 239) y_target = 239;
-    for (int xi = 0; xi < 480; xi++) {
-      Brain.Screen.drawPixel(xi, y_target);
-    }
-
-    // Draw Y-axis (time = 0 line)
-    Brain.Screen.drawPixel(0, y);
-
-    // Draw error point
-    if (x < 480) {
-      Brain.Screen.drawPixel(x, y);
-      x++;
-    }
+    time_elapsed += dt;
 
     wait(dt, seconds);
   }
 
-  right_motors.stop();
-  left_motors.stop();
+  // Stop motors
+  left_motors.stop(brake);
+  right_motors.stop(brake);
 }
 
-void turn(double said_target_angle, double turn_speed = 25) {
+void turn(double target_degrees, double max_speed = 38.5) {
+  // Reset encoders
   left_motors.setPosition(0, degrees);
   right_motors.setPosition(0, degrees);
 
-  double target_angle = said_target_angle * (180.0 / 110.0);
-  double K = 0.09;
+  // --- PID Gains ---
+  double Kp_angle = 0.250;
+  double Ki_angle = 0.007;
+  double Kd_angle = 0.029;
 
-  double ramp_speed = 0;
-  double ramp_step = 1;
+  double Kp_drift = 0.210;
+  double Kd_drift = 0.035;
 
-  int direction = (target_angle > 0) ? 1 : -1;
+  // --- PID State ---
+  double angle_error_prev = 0;
+  double angle_integral = 0;
 
-  while (fabs(left_motors.position(degrees)) < fabs(target_angle) ||
-         fabs(right_motors.position(degrees)) < fabs(target_angle)) {
+  double drift_error_prev = 0;
 
-    if (ramp_speed < turn_speed) {
-      ramp_speed += ramp_step;
-      if (ramp_speed > turn_speed) ramp_speed = turn_speed;
-    }
+  // --- Control ---
+  double output = 0;
+  double slew_rate = 2.0; // % per loop
+  double dt = 0.02;
 
-    double error = fabs(left_motors.position(degrees)) - fabs(right_motors.position(degrees));
-    Brain.Screen.print("%f |", error);
+  int stable_count = 0;
+  const int required_stable_cycles = 5;
+  const double tolerance = 3; // degrees
 
-    double left_speed = ramp_speed - K * error;
-    double right_speed = ramp_speed + K * error;
+  while (stable_count < required_stable_cycles) {
+    // --- Measured turn angle ---
+    double left_pos = left_motors.position(degrees);
+    double right_pos = right_motors.position(degrees);
+    // Turning angle estimate: difference between sides
 
-    if (left_speed < 0) left_speed = 0;
-    if (left_speed > 100) left_speed = 100;
-    if (right_speed < 0) right_speed = 0;
-    if (right_speed > 100) right_speed = 100;
+    double current_angle = ((left_pos - right_pos) / 2) * 21/36;
 
-    if (fabs(left_motors.position(degrees)) < fabs(target_angle)) {
-      left_motors.spin((direction > 0) ? forward : reverse, ramp_speed, percent);
-    } else {
-      left_motors.stop();
-    }
+    // --- PID for angle ---
+    double angle_error = target_degrees - current_angle;
+    angle_integral += angle_error * dt;
+    double angle_derivative = (angle_error - angle_error_prev) / dt;
+    angle_error_prev = angle_error;
 
-    if (fabs(right_motors.position(degrees)) < fabs(target_angle)) {
-      right_motors.spin((direction > 0) ? reverse : forward, ramp_speed, percent);
-    } else {
-      right_motors.stop();
-    }
+    double angle_output = ((Kp_angle * angle_error) + (Ki_angle * angle_integral) + (Kd_angle * angle_derivative));
 
-    wait(0.02, seconds);
+    // --- Slew rate ---
+    if (angle_output > output + slew_rate) output += slew_rate;
+    else if (angle_output < output - slew_rate) output -= slew_rate;
+    else output = angle_output;
+
+    // Clamp
+    if (output > max_speed) output = max_speed;
+    if (output < -max_speed) output = -max_speed;
+
+    // --- Drift correction ---
+    double drift_error = fabs(left_pos) - fabs(right_pos);
+    double drift_derivative = (drift_error - drift_error_prev) / dt;
+    drift_error_prev = drift_error;
+
+    double drift_correction = (Kp_drift * drift_error) + (Kd_drift * drift_derivative);
+
+    // --- Motor Speeds ---
+    double left_speed = output - drift_correction;
+    double right_speed = -output - drift_correction; // negative for opposite spin
+
+    left_motors.spin((left_speed >= 0) ? forward : reverse, fabs(left_speed), percent);
+    right_motors.spin((right_speed >= 0) ? forward : reverse, fabs(right_speed), percent);
+
+    // --- Exit Condition ---
+    if (fabs(angle_error) < tolerance) stable_count++;
+    else stable_count = 0;
+
+    wait(dt, seconds);
   }
 
-  right_motors.stop();
-  left_motors.stop();
+  // Stop motors with brake hold
+  left_motors.stop(brake);
+  right_motors.stop(brake);
 }
+
 
 void user_control() {
   double left_stick_y = controller_1.Axis3.position();
@@ -188,8 +205,35 @@ void user_control() {
   wait(0.02, seconds);
 }
 
-int main() {
-  straight(40);
-  turn(180);
-  straight(40);
+void spin_motor1(int speed1) {
+  motor1.setVelocity(speed1, percent);
+  motor1.spin(forward);
 }
+
+void inertial_turn(double target_angle, double max_speed = 50) {
+  inertial1.setHeading(0, degrees); // Reset heading
+
+  double inertial_turn_kp = 0.2; 
+
+  while (fabs(inertial1.heading(degrees) - target_angle) > 4.0) {
+    double current_angle = inertial1.heading(degrees);
+    double error = target_angle - current_angle;
+
+    double output = error * inertial_turn_kp;
+    if (output > max_speed) output = max_speed;
+    if (output < -max_speed) output = -max_speed;
+
+    left_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
+    right_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
+
+    wait(20, msec);
+  }
+
+  left_motors.stop(brake);
+  right_motors.stop(brake);
+}
+
+int main() {
+  inertial_turn(-90); // Spin motor1 at 100% speed
+}
+

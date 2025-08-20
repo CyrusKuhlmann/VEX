@@ -8,6 +8,7 @@
 /*----------------------------------------------------------------------------*/
 
 #include "vex.h"
+#include <cmath>
 
 using namespace vex;
 
@@ -23,7 +24,7 @@ motor_group Right_Motors(rightMotorA, rightMotorB);
 controller controller_1(primary);
 
 //settings
-double kP = 0.08;
+double kP = 0.04;
 double kI = 0.0;
 double kD = 0.0;
 
@@ -42,14 +43,24 @@ int turnDerivative;
 int turnTotalError = 0;
 
 bool doDrivePID = false;
+bool doTurnPID = false;
 
 bool resetDriveSensors = false;
+bool resetTurnSensors = false;
 
-int targetPosition = 0;
-int targetTurnPosition = 0;
 
-int drivePID(void*) {
-  while (doDrivePID) {
+
+void drivePID(int targetPosition) {
+
+  // Exit conditions
+  double tolerance = 1.0;          // degrees
+  int stableTimeRequired = 500;    // ms
+  int stableTime = 0;
+  int loopDelay = 20;               // ms
+  int timeout = 3000;               // ms
+  int elapsedTime = 0;
+
+  while (elapsedTime < timeout) {
 
     if (resetDriveSensors) {
       Left_Motors.setPosition(0, degrees);
@@ -67,57 +78,78 @@ int drivePID(void*) {
 
     // proportional, derivative, and integral
     error = targetPosition - averagePosition;
-    derivative = error - prevError;
-    totalError += error;
+    derivative = (error - prevError) / (loopDelay / 1000.0); 
+    totalError += error * (loopDelay / 1000.0); 
 
     double lateralMotorPower = ((kP * error) + (kI * totalError) + (kD * derivative));
     ///////////////////////////////////////////////////////////////////////////////
+    Left_Motors.spin(forward, lateralMotorPower, voltageUnits::volt);
+    Right_Motors.spin(forward, lateralMotorPower, voltageUnits::volt);
 
-    /////////////////////////////////////////////////////////
-    // Turn PID Control
-    /////////////////////////////////////////////////////////
-    int turnDifference = leftMotorPosition - rightMotorPosition;
 
-    // proportional, derivative, and integral
-    turnError = targetTurnPosition - turnDifference;
-    turnDerivative = turnError - turnPrevError;
-    turnTotalError += turnError;
-
-    double turnMotorPower = ((turnkP * turnError) + (turnkI * turnTotalError) + (turnkD * turnDerivative));
-    ///////////////////////////////////////////////////////////////////////////////
-    Left_Motors.spin(forward, lateralMotorPower + turnMotorPower, voltageUnits::volt);
-    Right_Motors.spin(forward, lateralMotorPower - turnMotorPower, voltageUnits::volt);
+    // --- Exit condition --- 
+    if (std::abs(error) <= tolerance) {
+        stableTime += loopDelay;
+        if (stableTime >= stableTimeRequired) {
+            break;
+        }
+    } 
+    else {
+        stableTime = 0; 
+    }
 
     prevError = error;
-    turnPrevError = turnError;
-    task::sleep(20); 
+    task::sleep(loopDelay); 
+    elapsedTime += loopDelay;
 
   }
 
   Left_Motors.stop();
   Right_Motors.stop();
-  return 0;
 
 }
 
+// void turnPID(int targetTurnPosition) {
+//   while (doTurnPID) {
+
+//     if (resetTurnSensors) {
+//       Left_Motors.setPosition(0, degrees);
+//       Right_Motors.setPosition(0, degrees);
+//       resetTurnSensors = false;
+//     }
+    
+//     int leftMotorPosition = Left_Motors.position(degrees);
+//     int rightMotorPosition = Right_Motors.position(degrees);
+
+//     /////////////////////////////////////////////////////////
+//     // Turn PID Control
+//     /////////////////////////////////////////////////////////
+//     int turnDifference = leftMotorPosition - rightMotorPosition;
+
+//     // proportional, derivative, and integral
+//     turnError = targetTurnPosition - turnDifference;
+//     turnDerivative = turnError - turnPrevError;
+//     turnTotalError += turnError;
+
+//     double turnMotorPower = ((turnkP * turnError) + (turnkI * turnTotalError) + (turnkD * turnDerivative));
+
+//     Left_Motors.spin(forward, turnMotorPower, voltageUnits::volt);
+//     Right_Motors.spin(forward, -turnMotorPower, voltageUnits::volt);
+
+//     turnPrevError = turnError;
+//     task::sleep(loopDelay);
+
+//   }
+
+//   Left_Motors.stop();
+//   Right_Motors.stop(); 
+
+// }
+
+
 void autonomous(void) {
-  doDrivePID = true;
-  task pidTask(drivePID, nullptr, 7);
-
-  resetDriveSensors = true;
-  targetPosition = 300; 
-  targetTurnPosition = 0;
-
-  task::sleep(2000); 
-
-  resetDriveSensors = true; 
-  targetPosition = -300; 
-  targetTurnPosition = 0; 
-
-  task::sleep(2000);
-
-  doDrivePID = false; 
-
+  drivePID(300);
+  drivePID(-300); 
 }
 
 
