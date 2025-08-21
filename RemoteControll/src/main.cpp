@@ -223,8 +223,8 @@ void inertial_turn(double target_angle, double max_speed = 50) {
     if (output > max_speed) output = max_speed;
     if (output < -max_speed) output = -max_speed;
 
-    left_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
-    right_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
+    left_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
+    right_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
 
     wait(20, msec);
   }
@@ -234,6 +234,6 @@ void inertial_turn(double target_angle, double max_speed = 50) {
 }
 
 int main() {
-  inertial_turn(-90); // Spin motor1 at 100% speed
+  inertial_turn(90); // Spin motor1 at 100% speed
 }
 
