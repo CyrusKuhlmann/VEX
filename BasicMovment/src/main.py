@@ -156,7 +156,7 @@ def user_control():
     left_stick_y = controller_1.axis3.position()
     right_stick_y = controller_1.axis2.position()
 
-    left_motors.set_velocity(left_stick_y, VelocityUnits.PERCENT)
+    left_motors.set_velocity(-left_stick_y, VelocityUnits.PERCENT)
     right_motors.set_velocity(right_stick_y, VelocityUnits.PERCENT)
 
     left_motors.spin(DirectionType.FORWARD)
@@ -165,6 +165,5 @@ def user_control():
     wait(0.02, TimeUnits.SECONDS)
 
 if __name__ == "__main__":
-    straight(40)
-    turn(180)
-    straight(40)
+    while True:
+        user_control()

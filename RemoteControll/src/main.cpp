@@ -23,9 +23,40 @@ motor_group right_motors(rightMotorA, rightMotorB);
 
 motor motor1(PORT16, ratio18_1, false);
 
+motor backTop(PORT13, ratio18_1, false);
+motor backMiddle(PORT2, ratio18_1, false);
+motor backBottom(PORT12, ratio18_1, false);
+
+motor frontTop(PORT3, ratio18_1, true);
+motor frontMiddle(PORT19, ratio18_1, true);
+motor frontBottom(PORT15, ratio18_1, true);
+
+motor_group frontAndBackMotors(frontTop, backTop, backBottom);
+
 inertial inertial1(PORT17);
 
+optical colorSensor(PORT14);
+
 controller controller_1(primary);
+
+bool isNearObject = false;
+bool isPrevNearObject = false;
+
+int observedColor = 0;
+int prevObservedColor = 0;
+
+
+#define MODE_OFF 0
+#define MODE_SCORE_BOTTOM 1
+#define MODE_SCORE_MIDDLE 2
+#define MODE_SCORE_TOP 3
+#define MODE_INTAKE 4
+#define MODE_SHOOT_OUT_BALLS 5
+
+int towerMode = MODE_OFF;
+
+int mainTime = 0;
+
 
 void straight(double target_inches, double max_speed = 50) {
   double time_elapsed = 0.0;
@@ -34,17 +65,17 @@ void straight(double target_inches, double max_speed = 50) {
   right_motors.setPosition(0, degrees);
 
   // --- Constants ---
-  const double wheel_circumference = 12.566; // 4" wheel
-  const double gear_ratio = 20.0 / 48.0;     // external gearing
+  const double wheel_circumference = 12.96; // 4" wheel
+  const double gear_ratio = 36.0 / 84.0;     // external gearing
   const double target_degrees = (target_inches * gear_ratio / wheel_circumference) * 360.0;
 
   // --- PID Gains ---
-  double Kp_dist = 0.325; // forward PID proportional
-  double Ki_dist = 0.009; // small integral term for bias
-  double Kd_dist = 0.038;  // derivative for overshoot control
+  double Kp_dist = 0.2; // forward PID proportional
+  double Ki_dist = 0.001; // small integral term for bias
+  double Kd_dist = 0.01;  // derivative for overshoot control
 
-  double Kp_drift = 0.300; // drift correction proportional
-  double Kd_drift = 0.042; // drift derivative
+  double Kp_drift = 0.200; // drift correction proportional
+  double Kd_drift = 0.021; // drift derivative
 
   // --- PID State ---
   double dist_error_prev = 0;
@@ -58,9 +89,10 @@ void straight(double target_inches, double max_speed = 50) {
 
   double dt = 0.02;
   int stable_count = 0;
-  const int required_stable_cycles = 5;
-  const double tolerance = 10; // degrees
+  const int required_stable_cycles = 10;
+  const double tolerance = 7.5; // degrees
 
+  double startAngle = inertial1.rotation(degrees);
   while (stable_count < required_stable_cycles) {
     // --- Positions ---
     double left_pos = left_motors.position(degrees);
@@ -68,7 +100,7 @@ void straight(double target_inches, double max_speed = 50) {
     double avg_pos = (left_pos + right_pos) / 2.0;
 
     // --- Distance PID ---
-    double dist_error = target_degrees - avg_pos;
+    double dist_error = target_degrees + avg_pos;
     dist_integral += dist_error * dt;
     double dist_derivative = (dist_error - dist_error_prev) / dt;
     dist_error_prev = dist_error;
@@ -85,18 +117,18 @@ void straight(double target_inches, double max_speed = 50) {
     if (output < -max_speed) output = -max_speed;
 
     // --- Drift Correction ---
-    double drift_error = left_pos - right_pos;
+    double drift_error = inertial1.rotation(degrees) - startAngle;
     double drift_derivative = (drift_error - drift_error_prev) / dt;
     drift_error_prev = drift_error;
 
     double drift_correction = ((Kp_drift * drift_error) + (Kd_drift * drift_derivative));
 
     // --- Motor Speeds ---
-    double left_speed = output - drift_correction;
-    double right_speed = output + drift_correction;
+    double left_speed = (output - drift_correction);
+    double right_speed = (output + drift_correction);
 
-    left_motors.spin((left_speed >= 0) ? forward : reverse, fabs(left_speed), percent);
-    right_motors.spin((right_speed >= 0) ? forward : reverse, fabs(right_speed), percent);
+    left_motors.spin((left_speed >= 0) ? reverse : forward, fabs(left_speed), percent);
+    right_motors.spin((right_speed >= 0) ? reverse : forward, fabs(right_speed), percent);
 
     // --- Exit Condition ---
     if (fabs(dist_error) < tolerance) stable_count++;
@@ -104,7 +136,8 @@ void straight(double target_inches, double max_speed = 50) {
 
     time_elapsed += dt;
 
-    wait(dt, seconds);
+    vex::wait(dt, seconds);
+
   }
 
   // Stop motors
@@ -183,7 +216,7 @@ void turn(double target_degrees, double max_speed = 38.5) {
     if (fabs(angle_error) < tolerance) stable_count++;
     else stable_count = 0;
 
-    wait(dt, seconds);
+    vex::wait(dt, seconds);
   }
 
   // Stop motors with brake hold
@@ -191,18 +224,16 @@ void turn(double target_degrees, double max_speed = 38.5) {
   right_motors.stop(brake);
 }
 
-
-void user_control() {
+void user_control(double speed = 50) {
   double left_stick_y = controller_1.Axis3.position();
   double right_stick_y = controller_1.Axis2.position();
 
-  left_motors.setVelocity(left_stick_y, percent);
-  right_motors.setVelocity(right_stick_y, percent);
+  left_motors.setVelocity(left_stick_y, velocityUnits(percent));
+  right_motors.setVelocity(right_stick_y, velocityUnits(percent));
 
-  left_motors.spin(forward);
-  right_motors.spin(forward);
+  left_motors.spin(reverse);
+  right_motors.spin(reverse);
 
-  wait(0.02, seconds);
 }
 
 void spin_motor1(int speed1) {
@@ -211,11 +242,21 @@ void spin_motor1(int speed1) {
 }
 
 void inertial_turn(double target_angle, double max_speed = 50) {
-  inertial1.setHeading(0, degrees); // Reset heading
 
-  double inertial_turn_kp = 0.2; 
+  double inertial_turn_kp = 0.275; 
 
-  while (fabs(inertial1.heading(degrees) - target_angle) > 4.0) {
+    // --- Graph settings ---
+  Brain.Screen.clearScreen();
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.setFillColor(black);
+  Brain.Screen.setFont(mono20);
+  Brain.Screen.printAt(10, 20, "Graph: Error (red), Heading (green)");
+
+  int t = 0; // time counter for x-axis
+
+  double dt = 0.02;
+
+  while (fabs(inertial1.heading(degrees) - target_angle) > 2.0) {
     double current_angle = inertial1.heading(degrees);
     double error = target_angle - current_angle;
 
@@ -223,17 +264,311 @@ void inertial_turn(double target_angle, double max_speed = 50) {
     if (output > max_speed) output = max_speed;
     if (output < -max_speed) output = -max_speed;
 
+        // --- Graph plotting ---
+    // Scale values to fit screen (0–240 for y-axis, x-axis time steps)
+    int x = t;
+    int y_error = 120 - error;      // center error around midline
+    int y_heading = 120 - current_angle;
+
+    // Clamp values so they stay on screen
+    if (y_error < 0) y_error = 0;
+    if (y_error > 240) y_error = 240;
+    if (y_heading < 0) y_heading = 0;
+    if (y_heading > 240) y_heading = 240;
+
+    Brain.Screen.setPenColor(red);
+    Brain.Screen.drawPixel(x, y_error);
+
+    Brain.Screen.setPenColor(green);
+    Brain.Screen.drawPixel(x, y_heading);
+
+    t += 1;
+
     left_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
     right_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
 
-    wait(20, msec);
+    vex::wait(dt, seconds);
   }
 
   left_motors.stop(brake);
   right_motors.stop(brake);
 }
 
-int main() {
-  inertial_turn(90); // Spin motor1 at 100% speed
+int drivePID() {
+  double maxDriveSpeed = 50; 
+
+  double kP_drive = 0.3;
+  double kD_drive = 0.01;
+
+  
+  double leftError, rightError;
+  double leftDerivative, rightDerivative;
+  double leftPrevError = 0, rightPrevError = 0;
+
+  while (true) {
+
+    double leftTarget  = controller_1.Axis3.position(percent); 
+    double rightTarget = controller_1.Axis2.position(percent);  
+
+    leftError  = leftTarget  - left_motors.velocity(percent);
+    rightError = rightTarget - right_motors.velocity(percent);
+
+    leftDerivative  = leftError  - leftPrevError;
+    rightDerivative = rightError - rightPrevError;
+
+    double leftOutput  = (kP_drive) * leftError + kD_drive * leftDerivative;
+    double rightOutput = (kP_drive) * rightError + kD_drive * rightDerivative;
+
+    if (leftOutput > maxDriveSpeed) leftOutput = maxDriveSpeed;
+    if (leftOutput < -maxDriveSpeed) leftOutput = -maxDriveSpeed;
+    if (rightOutput > maxDriveSpeed) rightOutput = maxDriveSpeed;
+    if (rightOutput < -maxDriveSpeed) rightOutput = -maxDriveSpeed;
+
+    left_motors.spin(forward, leftOutput, percent);
+    right_motors.spin(forward, rightOutput, percent);
+
+    leftPrevError  = leftError;
+    rightPrevError = rightError;
+
+    task::sleep(20);  // 20 ms loop time
+  }
+  return 0;
 }
+
+void moveTowerMotors(int speed = 50) {
+  frontAndBackMotors.setVelocity(speed, percent);
+  frontBottom.setVelocity(-speed, percent);
+  frontMiddle.setVelocity(-speed, percent);
+  backMiddle.setVelocity(-speed, percent);
+  frontAndBackMotors.spin(forward);
+  frontBottom.spin(forward);
+  frontMiddle.spin(forward);
+  backMiddle.spin(forward);
+}
+
+void floorToBasket(int speed = 50) {
+  frontBottom.setVelocity(speed, percentUnits::pct);
+  frontMiddle.setVelocity(speed, percentUnits::pct);
+  backMiddle.setVelocity(speed, percentUnits::pct);
+  backBottom.setVelocity(speed, percentUnits::pct);
+  frontTop.setVelocity(speed, percentUnits::pct);
+  backTop.setVelocity(speed, percentUnits::pct);
+  
+  frontBottom.spin(reverse);
+  frontMiddle.spin(reverse);
+  backMiddle.spin(reverse);
+  backBottom.spin(forward);
+  frontTop.spin(forward);
+  backTop.spin(reverse);
+}
+
+void lowGoalScore(int speed = 50) {
+  frontBottom.setVelocity(1.5*speed, percentUnits::pct);
+  frontMiddle.setVelocity(speed, percentUnits::pct);
+  backMiddle.setVelocity(speed, percentUnits::pct);
+  backBottom.setVelocity(speed, percentUnits::pct);
+  frontTop.setVelocity(speed, percentUnits::pct);
+  backTop.setVelocity(speed, percentUnits::pct);
+  
+  frontBottom.spin(forward);
+  frontMiddle.spin(forward);
+  backMiddle.spin(reverse);
+  backBottom.spin(reverse);
+  // frontTop.spin(reverse);
+  backTop.spin(reverse);
+}
+
+void middleGoalScore(int speed = 50) {
+  frontBottom.setVelocity(speed, percentUnits::pct);
+  frontBottom.setVelocity(speed, percentUnits::pct);
+  backMiddle.setVelocity(speed, percentUnits::pct);
+  backBottom.setVelocity(speed, percentUnits::pct);
+  frontTop.setVelocity(speed, percentUnits::pct);
+  backTop.setVelocity(speed, percentUnits::pct);
+  
+  frontBottom.spin(reverse);
+  frontMiddle.spin(reverse);
+  backMiddle.spin(reverse);
+  backBottom.spin(reverse);
+  frontTop.spin(reverse);
+  backTop.spin(reverse);
+}
+
+void highGoalScore(int speed = 50) {
+  frontBottom.setVelocity(speed, percentUnits::pct);
+  frontMiddle.setVelocity(speed, percentUnits::pct);
+  backMiddle.setVelocity(speed, percentUnits::pct);
+  backBottom.setVelocity(speed, percentUnits::pct);
+  frontTop.setVelocity(speed, percentUnits::pct);
+  backTop.setVelocity(speed, percentUnits::pct);
+  
+  frontBottom.spin(reverse);
+  frontMiddle.spin(reverse);
+  backMiddle.spin(reverse);
+  backBottom.spin(reverse);
+  frontTop.spin(forward);
+  backTop.spin(forward);
+}
+void shootOutBalls(int speed = 50) {
+  frontBottom.setVelocity(0.5*speed, percentUnits::pct);
+  frontMiddle.setVelocity(0.5*speed, percentUnits::pct);
+  frontTop.setVelocity(speed, percentUnits::pct);
+
+  frontBottom.spin(reverse);
+  frontMiddle.spin(reverse);
+  frontTop.spin(reverse);
+
+}
+
+bool redSelected = false;
+bool blueSelected = false;
+
+// Button areas (x1, y1, x2, y2)
+int redButton[4]  = {20, 40, 200, 120};   // left button
+int blueButton[4] = {220, 40, 400, 120};  // right button
+
+// Draw buttons
+void drawButtons() {
+  Brain.Screen.clearScreen();
+
+  // Red button
+  Brain.Screen.setFillColor(red);
+  Brain.Screen.drawRectangle(redButton[0], redButton[1],
+                             redButton[2]-redButton[0],
+                             redButton[3]-redButton[1]);
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.printAt(redButton[0]+50, redButton[1]+50, "RED");
+
+  // Blue button
+  Brain.Screen.setFillColor(blue);
+  Brain.Screen.drawRectangle(blueButton[0], blueButton[1],
+                             blueButton[2]-blueButton[0],
+                             blueButton[3]-blueButton[1]);
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.printAt(blueButton[0]+50, blueButton[1]+50, "BLUE");
+}
+
+// Check if point inside rectangle
+bool isInside(int x, int y, int rect[4]) {
+  return (x >= rect[0] && x <= rect[2] &&
+          y >= rect[1] && y <= rect[3]);
+}
+
+int main() {
+
+  drawButtons();
+
+  while (!redSelected && !blueSelected) {
+    if (Brain.Screen.pressing()) {
+      int x = Brain.Screen.xPosition();
+      int y = Brain.Screen.yPosition();
+
+      if (isInside(x, y, redButton)) {
+        redSelected = true;
+        blueSelected = false;
+        Brain.Screen.clearScreen();
+        drawButtons();
+        Brain.Screen.printAt(100, 200, "Red selected!");
+      }
+      else if (isInside(x, y, blueButton)) {
+        blueSelected = true;
+        redSelected = false;
+        Brain.Screen.clearScreen();
+        drawButtons();
+        Brain.Screen.printAt(100, 200, "Blue selected!");
+      }
+
+      // simple debounce delay
+      this_thread::sleep_for(300);
+    }
+    this_thread::sleep_for(20);
+  }
+  while (true) {
+    if (controller_1.ButtonR2.pressing()) {
+      towerMode = MODE_SCORE_BOTTOM;
+    } else if (controller_1.ButtonR1.pressing()) {
+      towerMode = MODE_SCORE_MIDDLE;
+    } else if (controller_1.ButtonL1.pressing()) {
+      towerMode = MODE_SCORE_TOP;
+    } else if (controller_1.ButtonL2.pressing()) {
+      towerMode = MODE_INTAKE;
+    } else if (controller_1.ButtonA.pressing()) {
+      towerMode = MODE_OFF;
+    }
+
+    switch(towerMode) {
+      case MODE_OFF:
+        frontAndBackMotors.stop();
+        frontBottom.stop();
+        frontMiddle.stop();
+        backMiddle.stop();
+        break;
+      case MODE_SCORE_BOTTOM:
+        lowGoalScore(50);
+        break;
+      case MODE_SCORE_MIDDLE:
+        middleGoalScore(50);
+        break;
+      case MODE_SCORE_TOP:
+        highGoalScore(50);
+        break;
+      case MODE_INTAKE:
+        floorToBasket(50);
+        break;
+      case MODE_SHOOT_OUT_BALLS:
+        shootOutBalls(100);
+        break;
+    }
+    user_control(50);
+
+    // check if the hue is greater than 120
+    if (redSelected) {
+      if (towerMode == MODE_INTAKE && colorSensor.hue() > 120) {
+        task::sleep(500);
+        towerMode = MODE_SHOOT_OUT_BALLS;
+      }
+    }
+    if (blueSelected) {
+      if (towerMode == MODE_INTAKE && colorSensor.hue() < 23) {
+        task::sleep(500); 
+        towerMode = MODE_SHOOT_OUT_BALLS;
+        
+      }
+    }
+    task::sleep(20);
+    if (towerMode == MODE_SHOOT_OUT_BALLS) {
+      mainTime += 20;
+      if (mainTime > 740) {
+        towerMode = MODE_INTAKE;
+        mainTime = 0;
+      }
+    }
+
+    isNearObject = colorSensor.isNearObject();
+    observedColor = colorSensor.hue();
+
+    if (!isNearObject && isPrevNearObject) {
+      if (redSelected) {
+        if (prevObservedColor > 120) {
+
+        }
+        if (prevObservedColor < 23) {
+
+        }
+      }
+      if (blueSelected) {
+        if (prevObservedColor > 120) {
+
+        }
+        if (prevObservedColor < 23) {
+
+        }
+    }
+
+    isPrevNearObject = isNearObject;
+    prevObservedColor = observedColor;
+
+  }
+}
+
 
