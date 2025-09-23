@@ -9,6 +9,8 @@
 
 #include "vex.h"
 #include <cmath>
+#include <iostream>
+#include <deque>
 
 using namespace vex;
 
@@ -39,11 +41,34 @@ optical colorSensor(PORT14);
 
 controller controller_1(primary);
 
+enum Color { RED, BLUE, NONE };
+
+Color myTeam = NONE;
+
+class Ball {
+	private:
+		Color color;
+		int observationTime;
+	public:
+		Ball(Color c, double t) : color(c), observationTime(t) {}
+		Color getColor() const { return color; }
+		int getObservationTime() const { return observationTime; }
+};
+
+std::ostream& operator<<(std::ostream& os, const Ball& b) {
+	os << (b.getColor() == RED ? "RED" : "BLUE") << " at " << b.getObservationTime();
+	return os;
+}
+
+std::deque<Ball> ballq;
+
+
+
 bool isNearObject = false;
 bool isPrevNearObject = false;
 
-int observedColor = 0;
-int prevObservedColor = 0;
+Color observedColor = NONE;
+Color prevObservedColor = NONE;
 
 
 #define MODE_OFF 0
@@ -420,9 +445,6 @@ void shootOutBalls(int speed = 50) {
 
 }
 
-bool redSelected = false;
-bool blueSelected = false;
-
 // Button areas (x1, y1, x2, y2)
 int redButton[4]  = {20, 40, 200, 120};   // left button
 int blueButton[4] = {220, 40, 400, 120};  // right button
@@ -458,21 +480,19 @@ int main() {
 
   drawButtons();
 
-  while (!redSelected && !blueSelected) {
+  while (myTeam == NONE) {
     if (Brain.Screen.pressing()) {
       int x = Brain.Screen.xPosition();
       int y = Brain.Screen.yPosition();
 
       if (isInside(x, y, redButton)) {
-        redSelected = true;
-        blueSelected = false;
+        myTeam = RED;
         Brain.Screen.clearScreen();
         drawButtons();
         Brain.Screen.printAt(100, 200, "Red selected!");
       }
       else if (isInside(x, y, blueButton)) {
-        blueSelected = true;
-        redSelected = false;
+        myTeam = BLUE;
         Brain.Screen.clearScreen();
         drawButtons();
         Brain.Screen.printAt(100, 200, "Blue selected!");
@@ -484,6 +504,9 @@ int main() {
     this_thread::sleep_for(20);
   }
   while (true) {
+
+    int currentTime = Brain.Timer.time(msec);
+
     if (controller_1.ButtonR2.pressing()) {
       towerMode = MODE_SCORE_BOTTOM;
     } else if (controller_1.ButtonR1.pressing()) {
@@ -521,53 +544,28 @@ int main() {
     }
     user_control(50);
 
-    // check if the hue is greater than 120
-    if (redSelected) {
-      if (towerMode == MODE_INTAKE && colorSensor.hue() > 120) {
-        task::sleep(500);
-        towerMode = MODE_SHOOT_OUT_BALLS;
-      }
-    }
-    if (blueSelected) {
-      if (towerMode == MODE_INTAKE && colorSensor.hue() < 23) {
-        task::sleep(500); 
-        towerMode = MODE_SHOOT_OUT_BALLS;
-        
-      }
-    }
-    task::sleep(20);
-    if (towerMode == MODE_SHOOT_OUT_BALLS) {
-      mainTime += 20;
-      if (mainTime > 740) {
-        towerMode = MODE_INTAKE;
-        mainTime = 0;
-      }
-    }
-
     isNearObject = colorSensor.isNearObject();
-    observedColor = colorSensor.hue();
+    int hue = colorSensor.hue();
+    observedColor = ( hue > 120) ? BLUE : ( hue < 23) ? RED : NONE;
 
-    if (!isNearObject && isPrevNearObject) {
-      if (redSelected) {
-        if (prevObservedColor > 120) {
-
-        }
-        if (prevObservedColor < 23) {
-
-        }
-      }
-      if (blueSelected) {
-        if (prevObservedColor > 120) {
-
-        }
-        if (prevObservedColor < 23) {
-
-        }
+    if (observedColor != prevObservedColor && prevObservedColor != NONE) {
+      ballq.push_front(Ball(prevObservedColor, currentTime));
     }
+    if (!ballq.empty()) {
+      if (currentTime - ballq.back().getObservationTime() > 120) {
+
+        towerMode = ballq.back().getColor() == myTeam ? MODE_INTAKE : MODE_SHOOT_OUT_BALLS;
+        ballq.pop_back();
+        // print on brain poped back
+        Brain.Screen.setPenColor(white);
+        Brain.Screen.printAt(10, 150, "Popped ball at time %d", currentTime);
+      }
+    }
+
+    task::sleep(20);
 
     isPrevNearObject = isNearObject;
     prevObservedColor = observedColor;
-
   }
 }
 
