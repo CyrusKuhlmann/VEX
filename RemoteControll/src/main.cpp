@@ -15,12 +15,12 @@
 using namespace vex;
 
 brain Brain;
-motor leftMotorA(PORT1, ratio18_1, false);
-motor leftMotorB(PORT11, ratio18_1, false);
+motor leftMotorA(PORT1, ratio18_1, true);
+motor leftMotorB(PORT11, ratio18_1, true);
 motor_group left_motors(leftMotorA, leftMotorB);
 
-motor rightMotorA(PORT10, ratio18_1, true);
-motor rightMotorB(PORT20, ratio18_1, true);
+motor rightMotorA(PORT10, ratio18_1, false);
+motor rightMotorB(PORT20, ratio18_1, false);
 motor_group right_motors(rightMotorA, rightMotorB);
 
 motor motor1(PORT16, ratio18_1, false);
@@ -50,7 +50,7 @@ class Ball {
 		Color color;
 		int observationTime;
 	public:
-		Ball(Color c, double t) : color(c), observationTime(t) {}
+		Ball(Color c, int t) : color(c), observationTime(t) {}
 		Color getColor() const { return color; }
 		int getObservationTime() const { return observationTime; }
 };
@@ -60,7 +60,8 @@ std::ostream& operator<<(std::ostream& os, const Ball& b) {
 	return os;
 }
 
-std::deque<Ball> ballq;
+std::deque<Ball> intakeq;
+std::deque<Ball> ejectq;
 
 
 
@@ -125,7 +126,7 @@ void straight(double target_inches, double max_speed = 50) {
     double avg_pos = (left_pos + right_pos) / 2.0;
 
     // --- Distance PID ---
-    double dist_error = target_degrees + avg_pos;
+    double dist_error = target_degrees - avg_pos;
     dist_integral += dist_error * dt;
     double dist_derivative = (dist_error - dist_error_prev) / dt;
     dist_error_prev = dist_error;
@@ -152,8 +153,8 @@ void straight(double target_inches, double max_speed = 50) {
     double left_speed = (output - drift_correction);
     double right_speed = (output + drift_correction);
 
-    left_motors.spin((left_speed >= 0) ? reverse : forward, fabs(left_speed), percent);
-    right_motors.spin((right_speed >= 0) ? reverse : forward, fabs(right_speed), percent);
+    left_motors.spin((left_speed >= 0) ? forward : reverse, fabs(left_speed), percent);
+    right_motors.spin((right_speed >= 0) ? forward : reverse, fabs(right_speed), percent);
 
     // --- Exit Condition ---
     if (fabs(dist_error) < tolerance) stable_count++;
@@ -251,13 +252,21 @@ void turn(double target_degrees, double max_speed = 38.5) {
 
 void user_control(double speed = 50) {
   double left_stick_y = controller_1.Axis3.position();
+  if (left_stick_y > speed) {
+    left_stick_y = speed;
+  }
   double right_stick_y = controller_1.Axis2.position();
+  if (right_stick_y > speed) {
+    right_stick_y = speed;
+  }
 
   left_motors.setVelocity(left_stick_y, velocityUnits(percent));
   right_motors.setVelocity(right_stick_y, velocityUnits(percent));
 
-  left_motors.spin(reverse);
-  right_motors.spin(reverse);
+  
+
+  left_motors.spin(forward);
+  right_motors.spin(forward);
 
 }
 
@@ -268,7 +277,9 @@ void spin_motor1(int speed1) {
 
 void inertial_turn(double target_angle, double max_speed = 50) {
 
-  double inertial_turn_kp = 0.275; 
+  double inertial_turn_kp = 0.235; 
+
+  double final = target_angle + inertial1.rotation(degrees);
 
     // --- Graph settings ---
   Brain.Screen.clearScreen();
@@ -276,30 +287,29 @@ void inertial_turn(double target_angle, double max_speed = 50) {
   Brain.Screen.setFillColor(black);
   Brain.Screen.setFont(mono20);
   Brain.Screen.printAt(10, 20, "Graph: Error (red), Heading (green)");
+  Brain.Screen.printAt(20, 150, "F: %.2f | CR: %.2f | TA: %.2f", final, inertial1.rotation(degrees), target_angle);
+
 
   int t = 0; // time counter for x-axis
 
-  double dt = 0.02;
+  double dt = 20;
 
-  while (fabs(inertial1.heading(degrees) - target_angle) > 2.0) {
-    double current_angle = inertial1.heading(degrees);
-    double error = target_angle - current_angle;
+  int stableCycles = 0;
+
+  while ( stableCycles < 5 ) {
+    double current_angle = inertial1.rotation(degrees);
+    double error = final - current_angle;
 
     double output = error * inertial_turn_kp;
+
     if (output > max_speed) output = max_speed;
     if (output < -max_speed) output = -max_speed;
 
         // --- Graph plotting ---
     // Scale values to fit screen (0–240 for y-axis, x-axis time steps)
     int x = t;
-    int y_error = 120 - error;      // center error around midline
-    int y_heading = 120 - current_angle;
-
-    // Clamp values so they stay on screen
-    if (y_error < 0) y_error = 0;
-    if (y_error > 240) y_error = 240;
-    if (y_heading < 0) y_heading = 0;
-    if (y_heading > 240) y_heading = 240;
+    int y_error = 120 -error;      // center error around midline
+    int y_heading = 120 -current_angle;
 
     Brain.Screen.setPenColor(red);
     Brain.Screen.drawPixel(x, y_error);
@@ -309,10 +319,16 @@ void inertial_turn(double target_angle, double max_speed = 50) {
 
     t += 1;
 
-    left_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
-    right_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
+    left_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
+    right_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
 
-    vex::wait(dt, seconds);
+    if (fabs(final - inertial1.rotation(degrees)) > 2.0) {
+      stableCycles = 0;
+    } else {
+      stableCycles++;
+    }
+
+    task::sleep(dt);
   }
 
   left_motors.stop(brake);
@@ -385,6 +401,26 @@ void floorToBasket(int speed = 50) {
   backBottom.spin(forward);
   frontTop.spin(forward);
   backTop.spin(reverse);
+}
+
+void printInertialInfo() {
+  Brain.Screen.clearScreen();
+  Brain.Screen.setFont(mono20);
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.setFillColor(black);
+
+  while (true) {
+    Brain.Screen.printAt(10, 20, "Inertial Sensor Info:");
+    Brain.Screen.printAt(10, 50, "Heading: %.2f", inertial1.heading());
+    Brain.Screen.printAt(10, 80, "Rotation: %.2f", inertial1.rotation());
+    Brain.Screen.printAt(10, 110, "Pitch: %.2f", inertial1.pitch());
+    Brain.Screen.printAt(10, 140, "Roll: %.2f", inertial1.roll());
+    Brain.Screen.printAt(10, 170, "Yaw: %.2f", inertial1.yaw());
+
+
+    task::sleep(500); // Update every 500 ms
+    Brain.Screen.clearScreen();
+  }
 }
 
 void lowGoalScore(int speed = 50) {
@@ -476,7 +512,79 @@ bool isInside(int x, int y, int rect[4]) {
           y >= rect[1] && y <= rect[3]);
 }
 
-int main() {
+
+void setTowerMode() {
+  if (towerMode != MODE_INTAKE && towerMode != MODE_SHOOT_OUT_BALLS) {
+    return;
+  }
+  
+  const int TIME_UNTIL_CONJUNCTION = 280;
+  const int TIME_UNTIL_EJECTION = 365;
+
+  int currentTime = Brain.Timer.time(msec);
+
+  isNearObject = colorSensor.isNearObject();
+
+  int hue = colorSensor.hue();
+
+  observedColor = ( hue > 120) ? BLUE : ( hue < 23) ? RED : NONE;
+
+  if (observedColor != prevObservedColor && prevObservedColor != NONE) {
+    if (intakeq.empty() && ejectq.empty()) {
+      towerMode = prevObservedColor == myTeam ? MODE_INTAKE : MODE_SHOOT_OUT_BALLS;
+
+    }
+    intakeq.push_front(Ball(prevObservedColor, currentTime));
+  }
+  if (!intakeq.empty()) {
+    Ball backOfIntakeq = intakeq.back();
+    if (currentTime - backOfIntakeq.getObservationTime() > TIME_UNTIL_CONJUNCTION) {
+
+      towerMode = backOfIntakeq.getColor() == myTeam ? MODE_INTAKE : MODE_SHOOT_OUT_BALLS;
+
+      ejectq.push_front(backOfIntakeq);
+      intakeq.pop_back();
+    }
+  }
+  if (!ejectq.empty()) {
+    Ball backOfEjectq = ejectq.back();
+    if (currentTime - backOfEjectq.getObservationTime() > TIME_UNTIL_EJECTION) {
+
+      ejectq.pop_back();
+    }
+  }
+  isPrevNearObject = isNearObject;
+  prevObservedColor = observedColor;
+}
+
+void setTowerMotors() {
+  switch(towerMode) {
+    case MODE_OFF:
+      frontAndBackMotors.stop();
+      frontBottom.stop();
+      frontMiddle.stop();
+      backMiddle.stop();
+      break;
+    case MODE_SCORE_BOTTOM:
+      lowGoalScore(50);
+      break;
+    case MODE_SCORE_MIDDLE:
+      middleGoalScore(50);
+      break;
+    case MODE_SCORE_TOP:
+      highGoalScore(50);
+      break;
+    case MODE_INTAKE:
+      floorToBasket(50);
+      break;
+    case MODE_SHOOT_OUT_BALLS:
+      shootOutBalls(100);
+      break;
+  }
+}
+
+
+int manual_drive() {
 
   drawButtons();
 
@@ -505,8 +613,6 @@ int main() {
   }
   while (true) {
 
-    int currentTime = Brain.Timer.time(msec);
-
     if (controller_1.ButtonR2.pressing()) {
       towerMode = MODE_SCORE_BOTTOM;
     } else if (controller_1.ButtonR1.pressing()) {
@@ -519,54 +625,49 @@ int main() {
       towerMode = MODE_OFF;
     }
 
-    switch(towerMode) {
-      case MODE_OFF:
-        frontAndBackMotors.stop();
-        frontBottom.stop();
-        frontMiddle.stop();
-        backMiddle.stop();
-        break;
-      case MODE_SCORE_BOTTOM:
-        lowGoalScore(50);
-        break;
-      case MODE_SCORE_MIDDLE:
-        middleGoalScore(50);
-        break;
-      case MODE_SCORE_TOP:
-        highGoalScore(50);
-        break;
-      case MODE_INTAKE:
-        floorToBasket(50);
-        break;
-      case MODE_SHOOT_OUT_BALLS:
-        shootOutBalls(100);
-        break;
-    }
-    user_control(50);
+    setTowerMotors();
 
-    isNearObject = colorSensor.isNearObject();
-    int hue = colorSensor.hue();
-    observedColor = ( hue > 120) ? BLUE : ( hue < 23) ? RED : NONE;
+    user_control();
 
-    if (observedColor != prevObservedColor && prevObservedColor != NONE) {
-      ballq.push_front(Ball(prevObservedColor, currentTime));
-    }
-    if (!ballq.empty()) {
-      if (currentTime - ballq.back().getObservationTime() > 120) {
+    setTowerMode();
 
-        towerMode = ballq.back().getColor() == myTeam ? MODE_INTAKE : MODE_SHOOT_OUT_BALLS;
-        ballq.pop_back();
-        // print on brain poped back
-        Brain.Screen.setPenColor(white);
-        Brain.Screen.printAt(10, 150, "Popped ball at time %d", currentTime);
-      }
-    }
+    task::sleep(40);
 
-    task::sleep(20);
-
-    isPrevNearObject = isNearObject;
-    prevObservedColor = observedColor;
   }
+  return 0;
+}
+
+int auton() {
+  inertial1.calibrate();
+
+  while (inertial1.isCalibrating()) {
+    task::sleep(100);
+  }
+
+  inertial1.setRotation(0, degrees);
+
+
+  straight(24);
+  inertial_turn(-30);
+
+  towerMode = MODE_INTAKE;
+  setTowerMotors();
+  
+  straight(10);
+  straight(-10);
+
+  towerMode = MODE_OFF;
+  setTowerMotors();
+  
+  inertial_turn(75);
+  straight(17);
+
+  return 0;
+}
+
+int main() {
+  //return manual_drive();
+  return auton();
 }
 
 
