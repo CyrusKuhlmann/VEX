@@ -15,6 +15,9 @@
 using namespace vex;
 
 brain Brain;
+
+competition Competition;
+
 motor leftMotorA(PORT1, ratio18_1, true);
 motor leftMotorB(PORT11, ratio18_1, true);
 motor_group left_motors(leftMotorA, leftMotorB);
@@ -30,10 +33,12 @@ motor backMiddle(PORT2, ratio18_1, false);
 motor backBottom(PORT12, ratio18_1, false);
 
 motor frontTop(PORT3, ratio18_1, true);
-motor frontMiddle(PORT19, ratio18_1, true);
-motor frontBottom(PORT15, ratio18_1, true);
+motor frontMiddle(PORT15, ratio18_1, true);
+motor frontBottom(PORT19, ratio18_1, false);
 
 motor_group frontAndBackMotors(frontTop, backTop, backBottom);
+
+motor feederMotor(PORT7, ratio18_1, false);
 
 inertial inertial1(PORT17);
 
@@ -43,6 +48,9 @@ controller controller_1(primary);
 
 enum Color { RED, BLUE, NONE };
 
+enum Side { LEFT, RIGHT, NONE_SIDE};
+
+Side mySide = NONE_SIDE;
 Color myTeam = NONE;
 
 class Ball {
@@ -67,6 +75,9 @@ std::deque<Ball> ejectq;
 
 bool isNearObject = false;
 bool isPrevNearObject = false;
+
+bool isUpward = true;
+bool isDownward = false;
 
 Color observedColor = NONE;
 Color prevObservedColor = NONE;
@@ -116,7 +127,7 @@ void straight(double target_inches, double max_speed = 50) {
   double dt = 0.02;
   int stable_count = 0;
   const int required_stable_cycles = 10;
-  const double tolerance = 7.5; // degrees
+  const double tolerance = 2; // degrees
 
   double startAngle = inertial1.rotation(degrees);
   while (stable_count < required_stable_cycles) {
@@ -278,6 +289,8 @@ void spin_motor1(int speed1) {
 void inertial_turn(double target_angle, double max_speed = 50) {
 
   double inertial_turn_kp = 0.235; 
+  double inertial_turn_ki = 0.005;
+  double inertial_turn_kd = 0.02;
 
   double final = target_angle + inertial1.rotation(degrees);
 
@@ -296,11 +309,21 @@ void inertial_turn(double target_angle, double max_speed = 50) {
 
   int stableCycles = 0;
 
+  double inertial_turn_prev_error = 0;
+  double inertial_turn_integral = 0;
+  double inertial_turn_derivative = 0;
+  
+
   while ( stableCycles < 5 ) {
     double current_angle = inertial1.rotation(degrees);
-    double error = final - current_angle;
 
-    double output = error * inertial_turn_kp;
+    double error = final - current_angle;
+    inertial_turn_derivative = (error - inertial_turn_prev_error)/(dt/1000.0);
+    inertial_turn_prev_error = error;
+
+    inertial_turn_integral += error * (dt/1000.0);
+
+    double output = (error * inertial_turn_kp) + (inertial_turn_integral * inertial_turn_ki) + (inertial_turn_derivative * inertial_turn_kd);
 
     if (output > max_speed) output = max_speed;
     if (output < -max_speed) output = -max_speed;
@@ -411,11 +434,11 @@ void printInertialInfo() {
 
   while (true) {
     Brain.Screen.printAt(10, 20, "Inertial Sensor Info:");
-    Brain.Screen.printAt(10, 50, "Heading: %.2f", inertial1.heading());
-    Brain.Screen.printAt(10, 80, "Rotation: %.2f", inertial1.rotation());
-    Brain.Screen.printAt(10, 110, "Pitch: %.2f", inertial1.pitch());
-    Brain.Screen.printAt(10, 140, "Roll: %.2f", inertial1.roll());
-    Brain.Screen.printAt(10, 170, "Yaw: %.2f", inertial1.yaw());
+    Brain.Screen.printAt(10, 50, "position: %.2f", feederMotor.position(degrees));
+    // Brain.Screen.printAt(10, 80, "Rotation: %.2f", inertial1.rotation());
+    // Brain.Screen.printAt(10, 110, "Pitch: %.2f", inertial1.pitch());
+    // Brain.Screen.printAt(10, 140, "Roll: %.2f", inertial1.roll());
+    // Brain.Screen.printAt(10, 170, "Yaw: %.2f", inertial1.yaw());
 
 
     task::sleep(500); // Update every 500 ms
@@ -440,14 +463,12 @@ void lowGoalScore(int speed = 50) {
 }
 
 void middleGoalScore(int speed = 50) {
-  frontBottom.setVelocity(speed, percentUnits::pct);
-  frontBottom.setVelocity(speed, percentUnits::pct);
   backMiddle.setVelocity(speed, percentUnits::pct);
   backBottom.setVelocity(speed, percentUnits::pct);
   frontTop.setVelocity(speed, percentUnits::pct);
   backTop.setVelocity(speed, percentUnits::pct);
   
-  frontBottom.spin(reverse);
+  frontBottom.stop();
   frontMiddle.spin(reverse);
   backMiddle.spin(reverse);
   backBottom.spin(reverse);
@@ -456,14 +477,13 @@ void middleGoalScore(int speed = 50) {
 }
 
 void highGoalScore(int speed = 50) {
-  frontBottom.setVelocity(speed, percentUnits::pct);
   frontMiddle.setVelocity(speed, percentUnits::pct);
   backMiddle.setVelocity(speed, percentUnits::pct);
   backBottom.setVelocity(speed, percentUnits::pct);
   frontTop.setVelocity(speed, percentUnits::pct);
   backTop.setVelocity(speed, percentUnits::pct);
   
-  frontBottom.spin(reverse);
+  frontBottom.stop();
   frontMiddle.spin(reverse);
   backMiddle.spin(reverse);
   backBottom.spin(reverse);
@@ -485,8 +505,11 @@ void shootOutBalls(int speed = 50) {
 int redButton[4]  = {20, 40, 200, 120};   // left button
 int blueButton[4] = {220, 40, 400, 120};  // right button
 
+int rightButton[4] = {220, 40, 400, 120};  
+int leftButton[4]  = {20, 40, 200, 120};
+
 // Draw buttons
-void drawButtons() {
+void drawRedBlueButtons() {
   Brain.Screen.clearScreen();
 
   // Red button
@@ -504,6 +527,26 @@ void drawButtons() {
                              blueButton[3]-blueButton[1]);
   Brain.Screen.setPenColor(white);
   Brain.Screen.printAt(blueButton[0]+50, blueButton[1]+50, "BLUE");
+}
+
+void drawRightLeftButtons() {
+  Brain.Screen.clearScreen();
+
+  // Left button
+  Brain.Screen.setFillColor(myTeam == RED ? red : blue);
+  Brain.Screen.drawRectangle(leftButton[0], leftButton[1],
+                             leftButton[2]-leftButton[0],
+                             leftButton[3]-leftButton[1]);
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.printAt(redButton[0]+50, redButton[1]+50, "LEFT");
+
+  // Right button
+  Brain.Screen.setFillColor(myTeam == RED ? red : blue);
+  Brain.Screen.drawRectangle(rightButton[0], rightButton[1],
+                             rightButton[2]-rightButton[0],
+                             rightButton[3]-rightButton[1]);
+  Brain.Screen.setPenColor(white);
+  Brain.Screen.printAt(blueButton[0]+50, blueButton[1]+50, "RIGHT");
 }
 
 // Check if point inside rectangle
@@ -583,11 +626,51 @@ void setTowerMotors() {
   }
 }
 
+void feederArm(int speed = 20) {
+  if (controller_1.ButtonUp.pressing()) {
+    Brain.Screen.printAt(10, 100, "Feeder Pos (up): %.2f", feederMotor.position(degrees));
+    while (feederMotor.position(degrees) > 0.5) {
+      isUpward = true;
+      isDownward = false;
+      feederMotor.setVelocity(speed, percent);
+      feederMotor.spin(reverse);
+      task::sleep(20);
+    }
+    feederMotor.stop(hold);
+  }
+  else if (controller_1.ButtonDown.pressing()) {
+    Brain.Screen.printAt(10, 100, "Feeder Pos (down): %.2f", feederMotor.position(degrees));
+    while (feederMotor.position(degrees) < 100) {
+      isDownward = true;
+      isUpward = false;
+      feederMotor.setVelocity(speed, percent);
+      feederMotor.spin(forward);
+      task::sleep(20);
+    }
+    feederMotor.stop(hold);
+  }
+}
 
-int manual_drive() {
+void resetFeederArm() {
+  feederMotor.setVelocity(10, percent);
+  feederMotor.spin(reverse);  
+  double prevPos = feederMotor.position(degrees);
+  while (true) {
+    task::sleep(100);
+    double newPos = feederMotor.position(degrees);
+    if (fabs(newPos - prevPos) < 0.5) {
+      break;
 
-  drawButtons();
+    }
+    prevPos = newPos;
+  }
+  feederMotor.stop(hold);
+  feederMotor.setPosition(0, degrees);
+}
 
+void configureRobot() {
+  drawRedBlueButtons();
+// team choosing
   while (myTeam == NONE) {
     if (Brain.Screen.pressing()) {
       int x = Brain.Screen.xPosition();
@@ -596,21 +679,53 @@ int manual_drive() {
       if (isInside(x, y, redButton)) {
         myTeam = RED;
         Brain.Screen.clearScreen();
-        drawButtons();
         Brain.Screen.printAt(100, 200, "Red selected!");
       }
       else if (isInside(x, y, blueButton)) {
         myTeam = BLUE;
         Brain.Screen.clearScreen();
-        drawButtons();
         Brain.Screen.printAt(100, 200, "Blue selected!");
       }
 
       // simple debounce delay
-      this_thread::sleep_for(300);
+      task::sleep(300);
     }
-    this_thread::sleep_for(20);
+    task::sleep(20);
   }
+  // team has been selected now select side
+  Brain.Screen.clearScreen();
+  drawRightLeftButtons();
+  Brain.Screen.printAt(10, 20, "Select side");
+  while (myTeam != NONE && mySide == NONE_SIDE) {
+    if (Brain.Screen.pressing()) {
+      int x = Brain.Screen.xPosition();
+      int y = Brain.Screen.yPosition();
+
+      if (isInside(x, y, redButton)) {
+        mySide = LEFT;
+        Brain.Screen.clearScreen();
+        Brain.Screen.printAt(100, 200, "Left selected!");
+      }
+      else if (isInside(x, y, blueButton)) {
+        mySide = RIGHT;
+        Brain.Screen.clearScreen();
+        Brain.Screen.printAt(100, 200, "Right selected!");
+      }
+
+      // simple debounce delay
+      task::sleep(300);
+    }
+    task::sleep(20);
+
+  }
+}
+
+void manual_drive() {
+
+  //resetFeederArm();
+
+
+
   while (true) {
 
     if (controller_1.ButtonR2.pressing()) {
@@ -629,15 +744,16 @@ int manual_drive() {
 
     user_control();
 
+    feederArm();
+
     setTowerMode();
 
     task::sleep(40);
 
   }
-  return 0;
 }
 
-int auton() {
+void calibrate() {
   inertial1.calibrate();
 
   while (inertial1.isCalibrating()) {
@@ -645,29 +761,99 @@ int auton() {
   }
 
   inertial1.setRotation(0, degrees);
+}
 
-
-  straight(24);
-  inertial_turn(-30);
+void leftAuton() {
 
   towerMode = MODE_INTAKE;
   setTowerMotors();
-  
-  straight(10);
-  straight(-10);
+
+  straight(22.5, 15);
+
+  straight(8, 7.5);
+
+  task::sleep(1000);
 
   towerMode = MODE_OFF;
   setTowerMotors();
-  
-  inertial_turn(75);
-  straight(17);
 
-  return 0;
+  straight(-4.5, 7.5);
+
+  inertial_turn(60);
+
+  straight(12, 15);
+
+  towerMode = MODE_SCORE_MIDDLE;
+  setTowerMotors();
+
+  straight(1.25, 5);
+
+  task::sleep(5000);
+
+  towerMode = MODE_OFF;
+  setTowerMotors();
+
+}
+
+void rightAuton() {
+
+  towerMode = MODE_INTAKE;
+  setTowerMotors();
+
+  straight(22.5, 15);
+
+  straight(8, 7.5);
+
+  task::sleep(1000);
+
+  towerMode = MODE_OFF;
+  setTowerMotors();
+
+  straight(-4.5, 7.5);
+
+  inertial_turn(-60);
+
+  straight(12, 15);
+
+  towerMode = MODE_SCORE_BOTTOM;
+  setTowerMotors();
+
+  straight(1.25, 5);
+
+  task::sleep(5000);
+
+  towerMode = MODE_OFF;
+  setTowerMotors();
+}
+
+void auton() {
+  if (mySide == LEFT) {
+    leftAuton();
+  } else if (mySide == RIGHT) {
+    rightAuton();
+  }
 }
 
 int main() {
-  //return manual_drive();
-  return auton();
+  Brain.Screen.clearScreen();
+  Brain.Screen.printAt(10, 20, "Robot Configuring...");
+
+  configureRobot();
+
+  Brain.Screen.clearScreen();
+  Brain.Screen.printAt(10, 20, "Inertial Calibrating...");
+
+  calibrate();
+
+  Brain.Screen.clearScreen();
+  Brain.Screen.printAt(10, 20, "Robot Ready!");
+
+  //Competition.autonomous(auton);
+  //Competition.drivercontrol(manual_drive);
+
+  auton();
+
+  while (true) {
+    task::sleep(20);
+  }
 }
-
-
