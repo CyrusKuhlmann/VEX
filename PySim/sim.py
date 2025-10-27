@@ -1,6 +1,9 @@
 import socket
 import numpy as np
 import pygame
+import threading
+import queue
+import time
 
 LATERAL_OFFSET = 0.0  # inches
 FORWARD_OFFSET = 7.25  # inches
@@ -15,8 +18,8 @@ class Robot:
         self.x = 0.0
         self.y = 0.0
         self.theta = 0.0
-        self.left_motor_speed = 50
-        self.right_motor_speed = 45.15
+        self.left_motor_speed = 0.0
+        self.right_motor_speed = 0.0
         self.left_motor_spin = "forward"
         self.right_motor_spin = "forward"
         self.perpendicular_motor_rotations = 0.0
@@ -83,14 +86,67 @@ class RobotSim:
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.host, self.port))
         self.sock.listen()
         self.robot = Robot()
+        self.message_queue = queue.Queue()
+        self.running = True
+        self.conn = None
+
+    def socket_thread(self):
+        """Thread function for handling socket communication"""
+        print(f"Socket server listening on {self.host}:{self.port}")
+
+        while self.running:
+            try:
+                # Accept connection
+                self.conn, addr = self.sock.accept()
+                print(f"Connected by {addr}")
+
+                while self.running:
+                    try:
+                        data = self.conn.recv(1024)
+                        if not data:
+                            break
+
+                        msg = data.decode().strip()
+                        if msg:
+                            # Put message in queue for main thread to process
+                            self.message_queue.put(msg)
+                            print(f"Received message: {msg}")
+
+                        # Send robot state back
+                        robot_state = f"x:{self.robot.x:.2f},y:{self.robot.y:.2f},theta:{self.robot.theta:.2f}"
+                        self.conn.sendall(robot_state.encode())
+
+                    except socket.error as e:
+                        print(f"Socket error: {e}")
+                        break
+
+            except socket.error as e:
+                if self.running:
+                    print(f"Socket accept error: {e}")
+                    time.sleep(1)  # Wait before retrying
+
+            finally:
+                if self.conn:
+                    self.conn.close()
+                    self.conn = None
+
+    def process_message_queue(self):
+        """Process all messages in the queue"""
+        while not self.message_queue.empty():
+            try:
+                msg = self.message_queue.get_nowait()
+                self.process_message(msg)
+            except queue.Empty:
+                break
 
     def process_message(self, msg):
         print("Processing message:", msg)
-        cmd = msg.split("|")[0]
-        params = msg.split("|")[1:]
+        cmd = msg.split(" | ")[0]
+        params = msg.split(" | ")[1:]
         if cmd == "set_velocity":
             motor_id = params[0]
             speed = float(params[1])
@@ -120,29 +176,70 @@ class RobotSim:
             else:
                 raise ValueError(f"Unknown motor ID: {motor_id}")
 
+    def start_socket_thread(self):
+        """Start the socket communication thread"""
+        self.socket_thread_obj = threading.Thread(
+            target=self.socket_thread, daemon=True
+        )
+        self.socket_thread_obj.start()
+
+    def stop(self):
+        """Clean shutdown of the simulator"""
+        self.running = False
+        if self.conn:
+            self.conn.close()
+        self.sock.close()
+
 
 if __name__ == "__main__":
     pygame.init()
     # launch a pygame window that is 800 x 600
     screen = pygame.display.set_mode((800, 600))
+    pygame.display.set_caption("VEX Robot Simulator")
     clock = pygame.time.Clock()
-    sim = RobotSim()
-    # conn, addr = sim.sock.accept()
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-        # data = conn.recv(1024)
-        # if not data:
-        #     break
-        # msg = data.decode()
-        # sim.process_message(msg)
-        # robot_state = "x:10,y:20,theta:1.57"
-        # conn.sendall(robot_state.encode())
 
-        screen.fill((255, 255, 255))
-        sim.robot.draw(screen)
-        sim.robot.step(1 / 60)
-        pygame.display.flip()
-        clock.tick(60)
+    # Create simulator and start socket thread
+    sim = RobotSim()
+    sim.start_socket_thread()
+
+    print("Starting pygame main loop...")
+    print("Socket thread is running in background...")
+
+    try:
+        # Main pygame loop runs in main thread
+        while sim.running:
+            # Handle pygame events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    sim.running = False
+                    break
+
+            # Process any incoming messages from socket thread
+            sim.process_message_queue()
+
+            # Update robot physics
+            sim.robot.step(1 / 60)
+
+            # Render
+            screen.fill((255, 255, 255))
+            sim.robot.draw(screen)
+
+            # Add some status text
+            font = pygame.font.Font(None, 36)
+            status_text = f"Robot: x={sim.robot.x:.1f}, y={sim.robot.y:.1f}, θ={np.degrees(sim.robot.theta):.1f}°"
+            text_surface = font.render(status_text, True, (0, 0, 0))
+            screen.blit(text_surface, (10, 10))
+
+            motor_text = f"Motors: L={sim.robot.left_motor_speed:.1f}% ({sim.robot.left_motor_spin}), R={sim.robot.right_motor_speed:.1f}% ({sim.robot.right_motor_spin})"
+            motor_surface = font.render(motor_text, True, (0, 0, 0))
+            screen.blit(motor_surface, (10, 50))
+
+            pygame.display.flip()
+            clock.tick(60)
+
+    except KeyboardInterrupt:
+        print("Interrupted by user")
+    finally:
+        print("Shutting down...")
+        sim.stop()
+        pygame.quit()

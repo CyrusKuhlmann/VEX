@@ -6,41 +6,82 @@
 
 #pragma comment(lib, "ws2_32.lib")  // Visual Studio only
 
-int main() {
-  WSADATA wsaData;
-  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-    std::cerr << "WSAStartup failed\n";
-    return 1;
-  }
+class Robot {
+ private:
+  std::string ip_address;
+  int port_number;
+  SOCKET sock;
+  void sendMsg(std::string command) {
+    std::string msg = command;
+    send(sock, msg.c_str(), msg.size(), 0);
 
-  SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock == INVALID_SOCKET) {
-    std::cerr << "Socket creation failed\n";
-    WSACleanup();
-    return 1;
-  }
+    char buffer[1024] = {0};
+    int bytesReceived = recv(sock, buffer, 1024, 0);
+    if (bytesReceived > 0)
+      std::cout << "Robot state: " << std::string(buffer, bytesReceived)
+                << std::endl;
 
-  sockaddr_in serv_addr;
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(65432);
-  inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
-
-  if (connect(sock, (sockaddr*)&serv_addr, sizeof(serv_addr)) == SOCKET_ERROR) {
-    std::cerr << "Connect failed\n";
     closesocket(sock);
     WSACleanup();
-    return 1;
+  };
+
+ public:
+  Robot(const std::string& ip, int port) : ip_address(ip), port_number(port) {
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) {
+      std::cerr << "Socket creation failed." << std::endl;
+      return;
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port_number);
+    inet_pton(AF_INET, ip_address.c_str(), &serverAddr.sin_addr);
+
+    if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) ==
+        SOCKET_ERROR) {
+      std::cerr << "Connection to robot failed." << std::endl;
+      closesocket(sock);
+      WSACleanup();
+      return;
+    }
   }
+  double getInertialHeading() { return 0.0; };
+  double getLeftMotorRotation() { return 0.0; };
+  double getRightMotorRotation() { return 0.0; };
+  double getParallelSensorRotation() { return 0.0; };
+  double getPerpendicularSensorRotation() { return 0.0; };
+  double getRobotX() { return 0.0; };
+  double getRobotY() { return 0.0; };
+  double getRobotTheta() { return 0.0; };
 
-  std::string msg = "MOVE 1 0.5";
-  send(sock, msg.c_str(), msg.size(), 0);
+  void setLeftMotorVelocity(double leftVelocity) {
+    sendMsg("set_velocity | left | " + std::to_string(leftVelocity));
+  };
+  void setRightMotorVelocity(double rightVelocity) {
+    sendMsg("set_velocity | right | " + std::to_string(rightVelocity));
+  };
 
-  char buffer[1024] = {0};
-  int bytesReceived = recv(sock, buffer, 1024, 0);
-  if (bytesReceived > 0)
-    std::cout << "Robot state: " << std::string(buffer, bytesReceived)
-              << std::endl;
+  void setLeftMotorSpin(double leftSpin) {
+    sendMsg("set_turn_state | left | " + std::to_string(leftSpin));
+  };
+  void setRightMotorSpin(double rightSpin) {
+    sendMsg("set_turn_state | right | " + std::to_string(rightSpin));
+  };
+  void setLeftMotorStop(double leftStop) {
+    sendMsg("set_stop | left | " + std::to_string(leftStop));
+  };
+  void setRightMotorStop(double rightStop) {
+    sendMsg("set_stop | right | " + std::to_string(rightStop));
+  };
+};
 
-  closesocket(sock);
-  WSACleanup();
+int main() {
+  Robot myRobot("127.0.0.1", 65432);
+  myRobot.setLeftMotorVelocity(100);
+  myRobot.setRightMotorVelocity(100);
+  return 0;
 }
