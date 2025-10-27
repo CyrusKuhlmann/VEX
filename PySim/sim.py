@@ -20,8 +20,8 @@ class Robot:
         self.theta = 0.0
         self.left_motor_speed = 0.0
         self.right_motor_speed = 0.0
-        self.left_motor_spin = "forward"
-        self.right_motor_spin = "forward"
+        self.left_motor_spin = "off"
+        self.right_motor_spin = "off"
         self.perpendicular_motor_rotations = 0.0
         self.parallel_motor_rotations = 0.0
 
@@ -145,36 +145,69 @@ class RobotSim:
 
     def process_message(self, msg):
         print("Processing message:", msg)
-        cmd = msg.split(" | ")[0]
-        params = msg.split(" | ")[1:]
-        if cmd == "set_velocity":
-            motor_id = params[0]
-            speed = float(params[1])
-            if motor_id == "left":
-                self.robot.left_motor_speed = speed
-            elif motor_id == "right":
-                self.robot.right_motor_speed = speed
+        try:
+            cmd = msg.split(" | ")[0]
+            params = msg.split(" | ")[1:]
+
+            if cmd == "set_velocity":
+                motor_id = params[0]
+                speed = float(params[1])
+                if motor_id == "left":
+                    self.robot.left_motor_speed = speed
+                elif motor_id == "right":
+                    self.robot.right_motor_speed = speed
+                else:
+                    raise ValueError(f"Unknown motor ID: {motor_id}")
+
+            elif cmd == "stop_motor":
+                motor_id = params[0]
+                if motor_id == "left":
+                    self.robot.left_motor_spin = "off"
+                elif motor_id == "right":
+                    self.robot.right_motor_spin = "off"
+                else:
+                    raise ValueError(f"Unknown motor ID: {motor_id}")
+
+            elif cmd == "spin_motor":
+                motor_id = params[0]
+                dir = params[1]
+                if dir not in ["forward", "reverse"]:
+                    raise ValueError(f"Unknown spin direction: {dir}")
+                if motor_id == "left":
+                    self.robot.left_motor_spin = dir
+                elif motor_id == "right":
+                    self.robot.right_motor_spin = dir
+                else:
+                    raise ValueError(f"Unknown motor ID: {motor_id}")
+
+            # Handle C++ client commands
+            elif cmd == "set_turn_state":
+                motor_id = params[0]
+                turn_value = float(params[1])
+                # Convert turn_value to direction (assuming positive = forward, negative = reverse)
+                direction = "forward" if turn_value >= 0 else "reverse"
+                if motor_id == "left":
+                    self.robot.left_motor_spin = direction
+                elif motor_id == "right":
+                    self.robot.right_motor_spin = direction
+                else:
+                    raise ValueError(f"Unknown motor ID: {motor_id}")
+
+            elif cmd == "set_stop":
+                motor_id = params[0]
+                if motor_id == "left":
+                    self.robot.left_motor_spin = "off"
+                    self.robot.left_motor_speed = 0.0
+                elif motor_id == "right":
+                    self.robot.right_motor_spin = "off"
+                    self.robot.right_motor_speed = 0.0
+                else:
+                    raise ValueError(f"Unknown motor ID: {motor_id}")
             else:
-                raise ValueError(f"Unknown motor ID: {motor_id}")
-        elif cmd == "stop_motor":
-            motor_id = params[0]
-            if motor_id == "left":
-                self.robot.left_motor_spin = "off"
-            elif motor_id == "right":
-                self.robot.right_motor_spin = "off"
-            else:
-                raise ValueError(f"Unknown motor ID: {motor_id}")
-        elif cmd == "spin_motor":
-            motor_id = params[0]
-            dir = params[1]
-            if dir not in ["forward", "reverse"]:
-                raise ValueError(f"Unknown spin direction: {dir}")
-            if motor_id == "left":
-                self.robot.left_motor_spin = dir
-            elif motor_id == "right":
-                self.robot.right_motor_spin = dir
-            else:
-                raise ValueError(f"Unknown motor ID: {motor_id}")
+                print(f"Unknown command: {cmd}")
+
+        except Exception as e:
+            print(f"Error processing message '{msg}': {e}")
 
     def start_socket_thread(self):
         """Start the socket communication thread"""
