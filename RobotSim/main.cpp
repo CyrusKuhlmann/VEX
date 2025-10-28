@@ -1,8 +1,13 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+#include <algorithm>
+#include <array>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #pragma comment(lib, "ws2_32.lib")  // Visual Studio only
 
@@ -12,6 +17,10 @@ class Robot {
   int port_number;
   SOCKET sock;
   bool connected;
+  double rightSensorRotations;
+  double leftSensorRotations;
+  double backSensorRotations;
+  double inertialHeading;
 
   bool connect_to_server() {
     WSADATA wsaData;
@@ -62,8 +71,24 @@ class Robot {
     char buffer[1024] = {0};
     int bytesReceived = recv(sock, buffer, 1024, 0);
     if (bytesReceived > 0) {
-      std::cout << "Robot state: " << std::string(buffer, bytesReceived)
-                << std::endl;
+      std::string data = std::string(buffer, bytesReceived);
+      std::stringstream ss(data);
+      std::vector<double> numbers;
+      std::string temp;
+
+      while (std::getline(ss, temp, '|')) {
+        // remove whitespace
+        temp.erase(remove_if(temp.begin(), temp.end(), ::isspace), temp.end());
+        if (!temp.empty()) {
+          numbers.push_back(std::stod(temp));
+        }
+      }
+      if (numbers.size() >= 4) {
+        leftSensorRotations = numbers[0];
+        rightSensorRotations = numbers[1];
+        backSensorRotations = numbers[2];
+        inertialHeading = numbers[3];
+      }
     } else if (bytesReceived == 0) {
       std::cout << "Connection closed by server." << std::endl;
       connected = false;
@@ -85,14 +110,15 @@ class Robot {
     }
   }
 
-  double getInertialHeading() { return 0.0; }
-  double getLeftMotorRotation() { return 0.0; }
-  double getRightMotorRotation() { return 0.0; }
-  double getParallelSensorRotation() { return 0.0; }
-  double getPerpendicularSensorRotation() { return 0.0; }
+  double getInertialHeading() { return inertialHeading; }
+  double getLeftSensorRotation() { return leftSensorRotations; }
+  double getRightSensorRotation() { return rightSensorRotations; }
+  double getBackSensorRotation() { return backSensorRotations; }
   double getRobotX() { return 0.0; }
   double getRobotY() { return 0.0; }
   double getRobotTheta() { return 0.0; }
+
+  void getSensors() { sendMsg("get_sensors"); }
 
   void setLeftMotorVelocity(double leftVelocity) {
     sendMsg("set_velocity | left | " + std::to_string(leftVelocity));
@@ -121,10 +147,23 @@ int main() {
   // Test sequence
   std::cout << "Setting motor velocities..." << std::endl;
   myRobot.setRightMotorVelocity(100);
-  myRobot.setLeftMotorVelocity(100);
+  myRobot.setLeftMotorVelocity(-100);
 
   myRobot.setRightMotorSpin("forward");
   myRobot.setLeftMotorSpin("forward");
+
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    myRobot.getSensors();
+    double inertial = myRobot.getInertialHeading();
+    double leftRot = myRobot.getLeftSensorRotation();
+    double rightRot = myRobot.getRightSensorRotation();
+    double backRot = myRobot.getBackSensorRotation();
+    std::cout << "Inertial Heading: " << inertial
+              << " | Left Rotation: " << leftRot
+              << " | Right Rotation: " << rightRot
+              << " | Back Rotation: " << backRot << std::endl;
+  }
 
   return 0;
 }

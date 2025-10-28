@@ -5,11 +5,13 @@ import threading
 import queue
 import time
 
-LATERAL_OFFSET = 0.0  # inches
-FORWARD_OFFSET = 7.25  # inches
 TRACKING_WHEEL_CIRCUMFERENCE = 2 * np.pi  # inches
 DRIVE_WHEEL_CIRCUMFERENCE = 4 * np.pi  # inches
-TRACKING_RADIUS = 7.25  # inches
+TRACKING_RADIUS = 5.0  # inches
+tl = 7.25  # inches
+tr = 7.25  # inches
+tb = 7.75  # inches
+
 MAX_RPM = 450
 
 
@@ -22,8 +24,9 @@ class Robot:
         self.right_motor_speed = 0.0
         self.left_motor_spin = "off"
         self.right_motor_spin = "off"
-        self.perpendicular_motor_rotations = 0.0
-        self.parallel_motor_rotations = 0.0
+        self.leftSensorRotations = 0.0
+        self.rightSensorRotations = 0.0
+        self.backSensorRotations = 0.0
 
     def step(self, dt):
         sl = (
@@ -39,8 +42,11 @@ class Robot:
 
         dl = MAX_RPM / 60 * DRIVE_WHEEL_CIRCUMFERENCE * dt * sl / 100
         dr = MAX_RPM / 60 * DRIVE_WHEEL_CIRCUMFERENCE * dt * sr / 100
+        self.leftSensorRotations += dl / TRACKING_WHEEL_CIRCUMFERENCE * 360
+        self.rightSensorRotations += dr / TRACKING_WHEEL_CIRCUMFERENCE * 360
 
         d_theta = (dr - dl) / (2 * TRACKING_RADIUS)
+        self.backSensorRotations += (d_theta * tb) / TRACKING_WHEEL_CIRCUMFERENCE * 360
 
         ds = (dl + dr) / 2
 
@@ -117,7 +123,7 @@ class RobotSim:
                             print(f"Received message: {msg}")
 
                         # Send robot state back
-                        robot_state = f"x:{self.robot.x:.2f},y:{self.robot.y:.2f},theta:{self.robot.theta:.2f}"
+                        robot_state = f"{self.robot.leftSensorRotations} | {self.robot.rightSensorRotations} | {self.robot.backSensorRotations} | {self.robot.theta}\n"
                         self.conn.sendall(robot_state.encode())
 
                     except socket.error as e:
@@ -266,6 +272,10 @@ if __name__ == "__main__":
             motor_text = f"Motors: L={sim.robot.left_motor_speed:.1f}% ({sim.robot.left_motor_spin}), R={sim.robot.right_motor_speed:.1f}% ({sim.robot.right_motor_spin})"
             motor_surface = font.render(motor_text, True, (0, 0, 0))
             screen.blit(motor_surface, (10, 50))
+            # add more status text for encoder rotations
+            encoder_text = f"Encoders: Left={sim.robot.leftSensorRotations:.1f}°, Right={sim.robot.rightSensorRotations:.1f}°, Back={sim.robot.backSensorRotations:.1f}°"
+            encoder_surface = font.render(encoder_text, True, (0, 0, 0))
+            screen.blit(encoder_surface, (10, 90))
 
             pygame.display.flip()
             clock.tick(60)
