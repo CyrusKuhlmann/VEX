@@ -27,6 +27,7 @@ class Robot:
         self.leftSensorRotations = 0.0
         self.rightSensorRotations = 0.0
         self.backSensorRotations = 0.0
+        self.clock = 0.0
 
     def step(self, dt):
         sl = (
@@ -58,6 +59,7 @@ class Robot:
         self.x += dx
         self.y += dy
         self.theta += d_theta
+        self.clock += dt
 
     def draw(self, screen):
         robot_width = 20
@@ -123,7 +125,7 @@ class RobotSim:
                             print(f"Received message: {msg}")
 
                         # Send robot state back
-                        robot_state = f"{self.robot.leftSensorRotations} | {self.robot.rightSensorRotations} | {self.robot.backSensorRotations} | {self.robot.theta}\n"
+                        robot_state = f"{self.robot.clock} | {self.robot.leftSensorRotations} | {self.robot.rightSensorRotations} | {self.robot.backSensorRotations} | {self.robot.theta/2*np.pi*360}\n"
                         self.conn.sendall(robot_state.encode())
 
                     except socket.error as e:
