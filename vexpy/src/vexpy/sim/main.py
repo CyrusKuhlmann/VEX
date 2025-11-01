@@ -1,12 +1,12 @@
 import socket
-import numpy as np
+import math
 import pygame
 import threading
 import queue
 import time
 
-TRACKING_WHEEL_CIRCUMFERENCE = 2 * np.pi  # inches
-DRIVE_WHEEL_CIRCUMFERENCE = 4 * np.pi  # inches
+TRACKING_WHEEL_CIRCUMFERENCE = 2 * math.pi  # inches
+DRIVE_WHEEL_CIRCUMFERENCE = 4 * math.pi  # inches
 TRACKING_RADIUS = 5.0  # inches
 tl = 7.25  # inches
 tr = 7.25  # inches
@@ -33,12 +33,16 @@ class Robot:
         sl = (
             self.left_motor_speed
             if self.left_motor_spin == "forward"
-            else -self.left_motor_speed if self.left_motor_spin == "reverse" else 0.0
+            else -self.left_motor_speed
+            if self.left_motor_spin == "reverse"
+            else 0.0
         )
         sr = (
             self.right_motor_speed
             if self.right_motor_spin == "forward"
-            else -self.right_motor_speed if self.right_motor_spin == "reverse" else 0.0
+            else -self.right_motor_speed
+            if self.right_motor_spin == "reverse"
+            else 0.0
         )
 
         dl = MAX_RPM / 60 * DRIVE_WHEEL_CIRCUMFERENCE * dt * sl / 100
@@ -53,8 +57,8 @@ class Robot:
 
         theta_avg = self.theta + (d_theta / 2)
 
-        dx = ds * np.cos(theta_avg)
-        dy = ds * np.sin(theta_avg)
+        dx = ds * math.cos(theta_avg)
+        dy = ds * math.sin(theta_avg)
 
         self.x += dx
         self.y += dy
@@ -74,7 +78,9 @@ class Robot:
         robot_surface.fill((255, 0, 0))  # red robot
 
         # Rotate the robot around its center based on heading (theta in radians)
-        rotated_surface = pygame.transform.rotate(robot_surface, np.degrees(self.theta))
+        rotated_surface = pygame.transform.rotate(
+            robot_surface, math.degrees(self.theta)
+        )
 
         # Recalculate position so rotation stays centered
         rotated_rect = rotated_surface.get_rect(center=(center_x, center_y))
@@ -84,8 +90,8 @@ class Robot:
 
         # Optional: draw a small heading line (to show forward direction)
         heading_length = 25
-        end_x = center_x + heading_length * np.cos(-self.theta)
-        end_y = center_y + heading_length * np.sin(-self.theta)
+        end_x = center_x + heading_length * math.cos(-self.theta)
+        end_y = center_y + heading_length * math.sin(-self.theta)
         pygame.draw.line(screen, (0, 0, 255), (center_x, center_y), (end_x, end_y), 2)
 
 
@@ -125,7 +131,7 @@ class RobotSim:
                             print(f"Received message: {msg}")
 
                         # Send robot state back
-                        robot_state = f"{self.robot.clock} | {self.robot.leftSensorRotations} | {self.robot.rightSensorRotations} | {self.robot.backSensorRotations} | {self.robot.theta/2*np.pi*360}\n"
+                        robot_state = f"{self.robot.clock} | {self.robot.leftSensorRotations} | {self.robot.rightSensorRotations} | {self.robot.backSensorRotations} | {self.robot.theta / 2 * math.pi * 360}\n"
                         self.conn.sendall(robot_state.encode())
 
                     except socket.error as e:
@@ -232,7 +238,7 @@ class RobotSim:
         self.sock.close()
 
 
-if __name__ == "__main__":
+def main():
     pygame.init()
     # launch a pygame window that is 800 x 600
     screen = pygame.display.set_mode((800, 600))
@@ -267,7 +273,7 @@ if __name__ == "__main__":
 
             # Add some status text
             font = pygame.font.Font(None, 36)
-            status_text = f"Robot: x={sim.robot.x:.1f}, y={sim.robot.y:.1f}, θ={np.degrees(sim.robot.theta):.1f}°"
+            status_text = f"Robot: x={sim.robot.x:.1f}, y={sim.robot.y:.1f}, θ={math.degrees(sim.robot.theta):.1f}°"
             text_surface = font.render(status_text, True, (0, 0, 0))
             screen.blit(text_surface, (10, 10))
 
