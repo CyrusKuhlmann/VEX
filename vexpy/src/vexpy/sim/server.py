@@ -12,10 +12,9 @@ class Server:
         self._sock.listen()
         self._conn = None
 
-    def start(self, on_connect, process_message):
+    def start(self, on_message):
         self._conn, addr = self._sock.accept()
         logger.info(f"Connected by {addr}")
-        on_connect()
         while self._conn:
             try:
                 data = self._conn.recv(1024)
@@ -24,7 +23,7 @@ class Server:
 
                 msg = data.decode().strip()
                 logger.info(f"Received message: {msg}")
-                response = process_message(msg)
+                response = on_message(msg)
                 logger.info(f"Sending response: {response}")
 
                 self._conn.sendall(response.encode())

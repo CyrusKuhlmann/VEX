@@ -11,5 +11,5 @@ class InertialSensor:
     def rotation(self, value):
         self._rotation = value
 
-    def __repr__(self):
-        return f"Inertial({self._id})={self._rotation:.2f}°"
+    def sense(self):
+        return {"rotation": self.rotation}

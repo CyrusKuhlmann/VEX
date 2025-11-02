@@ -12,15 +12,6 @@ tl = 7.25  # inches
 tr = 7.25  # inches
 tb = 7.75  # inches
 
-MAX_RPM = 450
-
-
-class Motor:
-    def __init__(self, id):
-        self._id = id
-        self._speed = 0.0  # percentage of max speed
-        self._spin = "off"  # "forward", "reverse", "off"
-
 
 class Robot:
     def __init__(self):

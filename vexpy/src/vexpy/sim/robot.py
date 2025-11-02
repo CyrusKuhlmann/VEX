@@ -65,3 +65,10 @@ class Robot:
         self._y += dy
         self._theta += math.degrees(d_theta)
         self.inertial.rotation = self._theta
+
+    def sense(self):
+        return {
+            "left_motor": self.left_motor.sense(),
+            "right_motor": self.right_motor.sense(),
+            "inertial": self.inertial.sense(),
+        }

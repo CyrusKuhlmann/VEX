@@ -55,5 +55,7 @@ class Motor:
             self._position += delta_degrees
         return delta_degrees
 
-    def __repr__(self):
-        return f"Motor({self._id}): pos={self._position:.2f}°, vel={self._velocity_pct}%, dir={self._direction.name}, spinning={self._spinning}"
+    def sense(self):
+        return {
+            "position": self.position,
+        }

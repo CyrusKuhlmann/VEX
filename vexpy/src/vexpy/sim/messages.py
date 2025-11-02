@@ -1,3 +1,5 @@
+import json
+import time
 import logging
 from .motor import Direction
 
@@ -44,5 +46,12 @@ class MessageHandler:
                 else:
                     raise ValueError(f"Unknown motor ID: {motor_id}")
 
+            elif cmd == "sleep":
+                duration_ms = int(params[0])
+                self.robot.step(duration_ms / 1000.0)
+                time.sleep(duration_ms / 1000.0)
+
         except Exception as e:
             logger.error(f"Error processing message '{msg}': {e}")
+
+        return json.dumps(self.robot.sense())
