@@ -53,7 +53,7 @@ class Robot:
         dl = self.left_motor.step(dt) * DRIVE_WHEEL_DIAMETER * math.pi / 360
         dr = self.right_motor.step(dt) * DRIVE_WHEEL_DIAMETER * math.pi / 360
 
-        d_theta = (dr - dl) / self.width  # in radians
+        d_theta = (dl - dr) / self.width  # in radians
         ds = (dl + dr) / 2
         theta_avg = self.theta + (d_theta / 2)
 
