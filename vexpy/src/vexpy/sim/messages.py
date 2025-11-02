@@ -10,40 +10,35 @@ class MessageHandler:
     def __init__(self, robot):
         self.robot = robot
 
+    def _get_motor_by_port(self, port):
+        if port == 1:
+            return self.robot.left_motor
+        elif port == 2:
+            return self.robot.right_motor
+        else:
+            raise ValueError(f"Unknown motor port: {port}")
+
     def process_message(self, msg):
         logger.info(f"Processing message: {msg}")
         try:
             data = json.loads(msg)
             cmd = data["cmd"]
             args = data["args"]
-            motor_id = "left" if data["port"] == 1 else "right"
 
             if cmd == "set_velocity":
                 velocity = float(args[0])
-                if motor_id == "left":
-                    self.robot.left_motor.velocity = velocity
-                elif motor_id == "right":
-                    self.robot.right_motor.velocity = velocity
-                else:
-                    raise ValueError(f"Unknown motor ID: {motor_id}")
+                motor = self._get_motor_by_port(data["port"])
+                motor.velocity = velocity
 
             elif cmd == "stop_motor":
-                if motor_id == "left":
-                    self.robot.left_motor.stop()
-                elif motor_id == "right":
-                    self.robot.right_motor.stop()
-                else:
-                    raise ValueError(f"Unknown motor ID: {motor_id}")
+                motor = self._get_motor_by_port(data["port"])
+                motor.stop()
 
             elif cmd == "spin_motor":
                 direction = args[0]
                 dir = Direction.from_string(direction)
-                if motor_id == "left":
-                    self.robot.left_motor.spin(dir)
-                elif motor_id == "right":
-                    self.robot.right_motor.spin(dir)
-                else:
-                    raise ValueError(f"Unknown motor ID: {motor_id}")
+                motor = self._get_motor_by_port(data["port"])
+                motor.spin(dir)
 
             elif cmd == "sleep":
                 duration_ms = int(args[0])
