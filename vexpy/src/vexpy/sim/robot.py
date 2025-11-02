@@ -24,6 +24,7 @@ class Robot:
         self._x = 0.0  # in inches
         self._y = 0.0  # in inches
         self._theta = 0.0  # in degrees
+        self._clock = 0.0  # in seconds
 
         self.left_motor = Motor("left")
         self.right_motor = Motor("right")
@@ -49,6 +50,10 @@ class Robot:
     def theta(self):
         return self._theta
 
+    @property
+    def clock(self):
+        return self._clock
+
     def step(self, dt):
         dl = self.left_motor.step(dt) * DRIVE_WHEEL_DIAMETER * math.pi / 360
         dr = self.right_motor.step(dt) * DRIVE_WHEEL_DIAMETER * math.pi / 360
@@ -66,9 +71,17 @@ class Robot:
         self._theta += math.degrees(d_theta)
         self.inertial.rotation = self._theta
 
+        self._clock += dt
+
     def sense(self):
         return {
+            "clock": self.clock,
             "left_motor": self.left_motor.sense(),
             "right_motor": self.right_motor.sense(),
             "inertial": self.inertial.sense(),
+            "cheat": {
+                "x": self.x,
+                "y": self.y,
+                "theta": self.theta,
+            },
         }
