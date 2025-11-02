@@ -13,7 +13,7 @@ def S(x):  # scale
 
 
 def T(x):  # translate
-    return RESOLUTION / 2 + S(x)
+    return RESOLUTION / 2 + x
 
 
 class PyGameVisualizer:
@@ -25,8 +25,8 @@ class PyGameVisualizer:
     def draw(self, robot):
         self.screen.fill(WHITE)
 
-        center_x = T(robot.x)
-        center_y = T(robot.y)
+        center_x = T(S(robot.x))
+        center_y = T(-S(robot.y))
         theta = -robot.theta  # Invert for pygame
         theta_rad = math.radians(theta)
 

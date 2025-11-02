@@ -7,6 +7,10 @@ class Direction(Enum):
     FORWARD = 1
     REVERSE = -1
 
+    @classmethod
+    def from_string(cls, s):
+        return cls[s.upper()]
+
 
 class Motor:
     def __init__(self, id, max_rpm=MAX_RPM):

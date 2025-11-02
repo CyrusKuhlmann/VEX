@@ -55,10 +55,11 @@ class Robot:
 
         d_theta = (dl - dr) / self.width  # in radians
         ds = (dl + dr) / 2
-        theta_avg = self.theta + (d_theta / 2)
+        theta_rad = math.radians(self._theta)
+        theta_avg = theta_rad + (d_theta / 2)
 
-        dx = ds * math.cos(theta_avg)
-        dy = ds * math.sin(theta_avg)
+        dx = ds * math.sin(theta_avg)
+        dy = ds * math.cos(theta_avg)
 
         self._x += dx
         self._y += dy

@@ -15,12 +15,11 @@ def main():
     robot.left_motor.velocity = 5.0  # percent
     robot.right_motor.velocity = 5.0  # percent
     robot.left_motor.spin(Direction.FORWARD)
-    robot.right_motor.spin(Direction.REVERSE)
+    robot.right_motor.spin(Direction.FORWARD)
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit(0)
         visualizer.draw(robot)
         robot.step(DELTA_SECONDS)
-        print(robot.theta)
         time.sleep(DELTA_SECONDS)  # Keep the window open
