@@ -1,27 +1,16 @@
-import json
-import socket
-from .robot import Robot, Direction
+from .connection import SocketConnection, SimulatedRobot
+from .actions import forward, turn_by
 
 
-class SocketRobot(Robot):
-    def __init__(self, socket, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._socket = socket
-
-    def send_(self, messages):
-        msg = json.dumps(messages)
-        self._socket.sendall(msg.encode())
-        data = self._socket.recv(1024)
-        sensor_data = json.loads(data.decode())
-        self.update_(sensor_data)
+def auton(robot):
+    turn_by(robot, 360, speed=30)
+    forward(robot, 24, speed=50)
+    turn_by(robot, -180, speed=30)
+    forward(robot, 24, speed=20)
+    turn_by(robot, 180, speed=10)
 
 
 def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect(("localhost", 65432))
-        robot = SocketRobot(sock, 16.0, 10.0)  # width, length in inches
-        robot.left_motor.set_velocity(50)
-        robot.left_motor.spin(Direction.FORWARD)
-        while robot.inertial.rotation() < 360:
-            robot.sleep(20)
-        robot.left_motor.stop()
+    with SocketConnection("localhost", 65432) as conn:
+        robot = SimulatedRobot(conn, 16.0, 10.0)  # width, length in inches
+        auton(robot)
