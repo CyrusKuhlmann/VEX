@@ -12,28 +12,10 @@ class Direction(Enum):
         return cls[s.upper()]
 
 
-class Accessory:
-    def __init__(self, port: int):
+class Motor:
+    def __init__(self, robot, port, ratio, reversed):
+        self._robot = robot
         self._port = port
-        self.messages = []
-
-    def send_(self, cmd: str, *args):
-        msg = {
-            "port": self._port,
-            "cmd": cmd,
-            "args": args,
-        }
-        self.messages.append(msg)
-
-    def flush_(self):
-        msgs = self.messages
-        self.messages = []
-        return msgs
-
-
-class Motor(Accessory):
-    def __init__(self, port, ratio, reversed):
-        super().__init__(port)
         self._ratio = ratio
         self._reversed = reversed
         self._max_rpm = 450
@@ -68,9 +50,18 @@ class Motor(Accessory):
         """Stop the motor."""
         self.send_("stop_motor")
 
+    def send_(self, cmd: str, *args):
+        msg = {
+            "port": self._port,
+            "cmd": cmd,
+            "args": args,
+        }
+        self._robot.send_(msg)
+
 
 class Inertial:
-    def __init__(self, port):
+    def __init__(self, robot, port):
+        self._robot = robot
         self._port = port
         self._rotation = 0.0  # in degrees
 
@@ -84,7 +75,6 @@ class Inertial:
 
 class Robot:
     def __init__(self, width, length):
-        self._messages = []
         self._width = width
         self._length = length
         self._x = 0.0  # in inches
@@ -93,12 +83,12 @@ class Robot:
         self._clock = 0.0  # in seconds
         self._cheat = {"x": 0.0, "y": 0.0, "theta": 0.0}
 
-        self.left_motor = Motor(port=1, ratio=1, reversed=False)
-        self.right_motor = Motor(port=2, ratio=1, reversed=False)
-        self.inertial = Inertial(port=3)
+        self.left_motor = Motor(self, port=1, ratio=1, reversed=False)
+        self.right_motor = Motor(self, port=2, ratio=1, reversed=False)
+        self.inertial = Inertial(self, port=3)
 
     def sleep(self, duration_ms: int):
-        self._messages.append(
+        self.send_(
             {
                 "port": -1,
                 "cmd": "sleep",
@@ -113,9 +103,5 @@ class Robot:
         self.inertial.update_(sensor_data["inertial"])
         self._cheat = sensor_data["cheat"]
 
-    def flush_(self):
-        msgs = self._messages
-        self._messages = []
-        msgs.extend(self.left_motor.flush_())
-        msgs.extend(self.right_motor.flush_())
-        return msgs
+    def send_(self, msg):
+        raise NotImplementedError("send_ method must be implemented by subclasses")

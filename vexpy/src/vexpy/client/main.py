@@ -1,28 +1,27 @@
 import json
 import socket
-from .robot import Robot
-from .robot import Direction
+from .robot import Robot, Direction
 
 
-def send(s, messages):
-    msg = json.dumps(messages)
-    s.sendall(msg.encode())
-    data = s.recv(1024)
-    return json.loads(data.decode())
+class SocketRobot(Robot):
+    def __init__(self, socket, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._socket = socket
+
+    def send_(self, messages):
+        msg = json.dumps(messages)
+        self._socket.sendall(msg.encode())
+        data = self._socket.recv(1024)
+        sensor_data = json.loads(data.decode())
+        self.update_(sensor_data)
 
 
 def main():
-    robot = Robot(16.0, 10.0)  # width, length in inches
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect(("localhost", 65432))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect(("localhost", 65432))
+        robot = SocketRobot(sock, 16.0, 10.0)  # width, length in inches
         robot.left_motor.set_velocity(50)
         robot.left_motor.spin(Direction.FORWARD)
-        send(s, robot.flush_())
-        intertial = 0
-        while intertial < 360:
+        while robot.inertial.rotation() < 360:
             robot.sleep(20)
-            sensors = send(s, robot.flush_())
-            print(sensors)
-            intertial = sensors["inertial"]["rotation"]
         robot.left_motor.stop()
-        send(s, robot.flush_())
