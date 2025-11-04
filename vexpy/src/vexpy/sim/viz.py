@@ -23,6 +23,10 @@ class PyGameVisualizer:
         self.screen = pygame.display.set_mode((RESOLUTION, RESOLUTION))
 
     def draw(self, robot):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
         self.screen.fill(WHITE)
 
         center_x = T(S(robot.x))

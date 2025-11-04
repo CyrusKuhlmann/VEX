@@ -8,7 +8,9 @@ authors = [
     { name = "Cyrus Kuhlmann", email = "cyrus.kuhlmann@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pygame>=2.6.1",
+]
 
 [project.scripts]
 vexpy-sim = "vexpy.sim:main"
