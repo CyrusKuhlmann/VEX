@@ -1,7 +1,7 @@
 // ----------------------------------------------------------------------------
 // 
 //  Module:       main.cpp
-//  Author:       cyrus
+//  Author:       Cosmic Electrons
 //  Created:      6/28/2025, 12:26:42 PM
 //  Description:  V5 project
 //
@@ -38,7 +38,7 @@ motor frontBottom(PORT19, ratio18_1, false);
 
 motor_group frontAndBackMotors(frontTop, backTop, backBottom);
 
-motor feederMotor(PORT7, ratio18_1, false);
+motor feederMotor(PORT8, ratio18_1, false);
 
 inertial inertial1(PORT17);
 
@@ -90,7 +90,14 @@ Color prevObservedColor = NONE;
 #define MODE_INTAKE 4
 #define MODE_SHOOT_OUT_BALLS 5
 
+#define MODE_FAST 6
+#define MODE_MEDIUM 7
+#define MODE_SLOW 8
+
 int towerMode = MODE_OFF;
+
+int driveSpeed = MODE_MEDIUM;
+
 
 int mainTime = 0;
 
@@ -127,7 +134,7 @@ void straight(double target_inches, double max_speed = 50) {
   double dt = 0.02;
   int stable_count = 0;
   const int required_stable_cycles = 10;
-  const double tolerance = 2; // degrees
+  const double tolerance = 10; // degrees
 
   double startAngle = inertial1.rotation(degrees);
   while (stable_count < required_stable_cycles) {
@@ -178,6 +185,31 @@ void straight(double target_inches, double max_speed = 50) {
   }
 
   // Stop motors
+  left_motors.stop(brake);
+  right_motors.stop(brake);
+}
+
+void swing() {
+  left_motors.setVelocity(25, percent);
+  right_motors.setVelocity(100, percent);
+
+  left_motors.spin(reverse);
+  right_motors.spin(reverse);
+
+  task::sleep(750);
+
+  right_motors.stop(brake);
+  left_motors.stop(brake);
+
+  left_motors.setVelocity(100, percent);
+  right_motors.setVelocity(100, percent);
+
+  left_motors.spin(reverse);
+  right_motors.spin(reverse);
+
+
+  task::sleep(1750);
+
   left_motors.stop(brake);
   right_motors.stop(brake);
 }
@@ -260,13 +292,18 @@ void turn(double target_degrees, double max_speed = 38.5) {
   left_motors.stop(brake);
   right_motors.stop(brake);
 }
+double getMotorSpeed(double stick) {
+  double stickScaled = stick / 100.0;
+  double dampedSpeed = std::max(std::min((std::tan(stickScaled/0.7))/4,1.0),-1.0);
+  return dampedSpeed * 100;
+}
 
-void user_control(double speed = 50) {
-  double left_stick_y = controller_1.Axis3.position();
+void user_control(double speed = 100) {
+  double left_stick_y = getMotorSpeed(controller_1.Axis3.position());
   if (left_stick_y > speed) {
     left_stick_y = speed;
   }
-  double right_stick_y = controller_1.Axis2.position();
+  double right_stick_y = getMotorSpeed(controller_1.Axis2.position());
   if (right_stick_y > speed) {
     right_stick_y = speed;
   }
@@ -345,7 +382,7 @@ void inertial_turn(double target_angle, double max_speed = 50) {
     left_motors.spin((output >= 0) ? forward : reverse, fabs(output), percent);
     right_motors.spin((output >= 0) ? reverse : forward, fabs(output), percent);
 
-    if (fabs(final - inertial1.rotation(degrees)) > 2.0) {
+    if (fabs(final - inertial1.rotation(degrees)) > 5.0) {
       stableCycles = 0;
     } else {
       stableCycles++;
@@ -446,8 +483,8 @@ void printInertialInfo() {
   }
 }
 
-void lowGoalScore(int speed = 50) {
-  frontBottom.setVelocity(1.5*speed, percentUnits::pct);
+void lowGoalScore(int speed = 100) {
+  frontBottom.setVelocity(speed, percentUnits::pct);
   frontMiddle.setVelocity(speed, percentUnits::pct);
   backMiddle.setVelocity(speed, percentUnits::pct);
   backBottom.setVelocity(speed, percentUnits::pct);
@@ -462,7 +499,7 @@ void lowGoalScore(int speed = 50) {
   backTop.spin(reverse);
 }
 
-void middleGoalScore(int speed = 50) {
+void middleGoalScore(int speed = 100) {
   backMiddle.setVelocity(speed, percentUnits::pct);
   backBottom.setVelocity(speed, percentUnits::pct);
   frontTop.setVelocity(speed, percentUnits::pct);
@@ -476,7 +513,7 @@ void middleGoalScore(int speed = 50) {
   backTop.spin(reverse);
 }
 
-void highGoalScore(int speed = 50) {
+void highGoalScore(int speed = 100) {
   frontMiddle.setVelocity(speed, percentUnits::pct);
   backMiddle.setVelocity(speed, percentUnits::pct);
   backBottom.setVelocity(speed, percentUnits::pct);
@@ -490,9 +527,9 @@ void highGoalScore(int speed = 50) {
   frontTop.spin(forward);
   backTop.spin(forward);
 }
-void shootOutBalls(int speed = 50) {
-  frontBottom.setVelocity(0.5*speed, percentUnits::pct);
-  frontMiddle.setVelocity(0.5*speed, percentUnits::pct);
+void shootOutBalls(int speed = 100) {
+  frontBottom.setVelocity(speed, percentUnits::pct);
+  frontMiddle.setVelocity(speed, percentUnits::pct);
   frontTop.setVelocity(speed, percentUnits::pct);
 
   frontBottom.spin(reverse);
@@ -561,8 +598,8 @@ void setTowerMode() {
     return;
   }
   
-  const int TIME_UNTIL_CONJUNCTION = 280;
-  const int TIME_UNTIL_EJECTION = 365;
+  const int TIME_UNTIL_CONJUNCTION = 245;
+  const int TIME_UNTIL_EJECTION = 310;
 
   int currentTime = Brain.Timer.time(msec);
 
@@ -609,16 +646,16 @@ void setTowerMotors() {
       backMiddle.stop();
       break;
     case MODE_SCORE_BOTTOM:
-      lowGoalScore(50);
+      lowGoalScore(100);
       break;
     case MODE_SCORE_MIDDLE:
-      middleGoalScore(50);
+      middleGoalScore(100);
       break;
     case MODE_SCORE_TOP:
-      highGoalScore(50);
+      highGoalScore(100);
       break;
     case MODE_INTAKE:
-      floorToBasket(50);
+      floorToBasket(100);
       break;
     case MODE_SHOOT_OUT_BALLS:
       shootOutBalls(100);
@@ -722,6 +759,40 @@ void configureRobot() {
 
 void manual_drive() {
 
+  resetFeederArm();
+
+
+
+  while (true) {
+
+    if (controller_1.ButtonR2.pressing()) {
+      towerMode = MODE_SCORE_BOTTOM;
+    } else if (controller_1.ButtonR1.pressing()) {
+      towerMode = MODE_SCORE_MIDDLE;
+    } else if (controller_1.ButtonL1.pressing()) {
+      towerMode = MODE_SCORE_TOP;
+    } else if (controller_1.ButtonL2.pressing()) {
+      towerMode = MODE_INTAKE;
+    } else if (controller_1.ButtonA.pressing()) {
+      towerMode = MODE_OFF;
+    } 
+
+
+    setTowerMotors();
+
+    user_control();
+
+    feederArm();
+
+    setTowerMode();
+
+    task::sleep(40);
+
+  }
+}
+
+void manual_drive_skills() {
+
   //resetFeederArm();
 
 
@@ -744,9 +815,9 @@ void manual_drive() {
 
     user_control();
 
-    feederArm();
+    // feederArm();
 
-    setTowerMode();
+    //setTowerMode();
 
     task::sleep(40);
 
@@ -826,6 +897,14 @@ void rightAuton() {
   setTowerMotors();
 }
 
+void skillsAuton() {
+  straight(-20, 15);
+
+  straight(60, 100);
+
+  
+}
+
 void auton() {
   if (mySide == LEFT) {
     leftAuton();
@@ -848,10 +927,12 @@ int main() {
   Brain.Screen.clearScreen();
   Brain.Screen.printAt(10, 20, "Robot Ready!");
 
-  //Competition.autonomous(auton);
-  //Competition.drivercontrol(manual_drive);
+  // Competition.autonomous(auton);
+  // Competition.drivercontrol(manual_drive);
 
-  auton();
+  manual_drive();
+  //auton();
+  //skillsAuton();
 
   while (true) {
     task::sleep(20);
