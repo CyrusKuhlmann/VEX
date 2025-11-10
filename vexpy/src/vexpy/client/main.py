@@ -1,13 +1,13 @@
 from .connection import SocketConnection, SimulatedRobot
-from .actions import forward, turn_by
+from .actions import forward, turn_by, forwardPID, turn_byPID
 
 
 def auton(robot):
-    turn_by(robot, 360, speed=30)
-    forward(robot, 24, speed=50)
-    turn_by(robot, -180, speed=30)
-    forward(robot, 24, speed=20)
-    turn_by(robot, 180, speed=10)
+    turn_byPID(robot, 360, speed=30)
+    forwardPID(robot, 24, speed=100)
+    turn_byPID(robot, -180, speed=30)
+    forwardPID(robot, 24, speed=100)
+    turn_byPID(robot, 180, speed=30)
 
 
 def main():
