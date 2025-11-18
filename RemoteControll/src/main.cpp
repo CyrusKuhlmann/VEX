@@ -71,8 +71,6 @@ std::ostream& operator<<(std::ostream& os, const Ball& b) {
 std::deque<Ball> intakeq;
 std::deque<Ball> ejectq;
 
-
-
 bool isNearObject = false;
 bool isPrevNearObject = false;
 
