@@ -1,7 +1,7 @@
 #include "main.h"
 
+#include "Kalman.cpp"
 #include "api.h"
-#include "odom.hpp"
 
 /**
  * A callback function for LLEMU's center button.
@@ -25,10 +25,7 @@ void on_center_button() {
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
-void initialize() {
-  robot.init();
-  start_odometry_task();
-}
+void initialize() {}
 
 /**
  * Runs while the robot is in the disabled state of Field Management System or
@@ -62,14 +59,7 @@ void competition_initialize() {}
  * from where it left off.
  */
 
-void autonomous() {
-  for (int i = 0; i < 500; i++) {
-    pros::lcd::print(0, "X: %.2f", robot.x);
-    pros::lcd::print(1, "Y: %.2f", robot.y);
-    pros::lcd::print(2, "Theta: %.2f", robot.theta);
-    pros::delay(20);
-  }
-}
+void autonomous() {}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -86,25 +76,20 @@ void autonomous() {
  */
 
 void opcontrol() {
+  pros::lcd::initialize();
   pros::Controller master(pros::E_CONTROLLER_MASTER);
-  pros::MotorGroup left_mg({5, -6, 7});  // Creates a motor group with forwards
-                                         // ports 5 & 7 and reversed port 6
-  pros::MotorGroup right_mg(
-      {-8, 9, -10});  // Creates a motor group with forwards port 9 and reversed
-                      // ports 8 & 10
+  pros::MotorGroup left_mg({-16, -5, -10});
+  pros::MotorGroup right_mg({11, 8, 20});
+  pros::Task kf_task(kalman_task);
 
   while (true) {
+    left_mg.move(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y));
+    right_mg.move(master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y));
+
     pros::lcd::print(0, "X: %.2f", robot.x);
     pros::lcd::print(1, "Y: %.2f", robot.y);
-    pros::lcd::print(2, "Theta: %.2f", robot.theta);
+    pros::lcd::print(2, "Theta: %.2f", robot.theta_fusion);
 
-    // Arcade control scheme
-    int dir = master.get_analog(
-        ANALOG_LEFT_Y);  // Gets amount forward/backward from left joystick
-    int turn = master.get_analog(
-        ANALOG_RIGHT_X);        // Gets the turn left/right from right joystick
-    left_mg.move(dir - turn);   // Sets left motor voltage
-    right_mg.move(dir + turn);  // Sets right motor voltage
-    pros::delay(20);            // Run for 20 ms then update
+    pros::delay(20);
   }
 }
