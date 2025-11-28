@@ -35,8 +35,8 @@ void Odom::update_xy() {
   xy = prev_xy + R_average_theta * delta_xy;
 }
 void Odom::debug(int i) {
-  // pros::lcd::print(0, "X: %.2f in", xy(0, 0));
-  // pros::lcd::print(1, "Y: %.2f in", xy(1, 0));
+  pros::lcd::print(0, "X: %.2f in", xy(0, 0));
+  pros::lcd::print(1, "Y: %.2f in", xy(1, 0));
   pros::lcd::print(2, "Theta: %.2f deg", theta_degrees);
   // print out the raw values for rotation sensors
   // pros::lcd::print(5, "L: %.2f in", s_l_corrected);

@@ -12,9 +12,12 @@ extern pros::Rotation forward_rot;
 extern pros::Imu imu;
 
 const double TRACKING_WHEEL_DIAMETER_INCHES = 2.0;
-const double FORWARD_CORRECTION_FACTOR = 0.914346;  // inches per radian
-const double LATERAL_CORRECTION_FACTOR = 7.883524;  // inches per radian
-const double IMU_CORRECTION_FACTOR = 1.0059;  // multiplier to correct IMU drift
+const double FORWARD_CORRECTION_CLOCK = 0.95;          // inches per radian
+const double FORWARD_CORRECTION_COUNTERCLOCK = 0.125;  // inches per radian
+const double LATERAL_CORRECTION_CLOCK = 7.72;          // inches per radian
+const double LATERAL_CORRECTION_COUNTERCLOCK = 8.14;   // inches per radian
+const double IMU_CORRECTION_FACTOR =
+    1.0059 * (360.0 / 359.0);  // multiplier to correct IMU drift
 
 class Odom {
  private:
@@ -38,8 +41,10 @@ class Odom {
  public:
   // Constructor
   Odom()
-      : forward_pod(TRACKING_WHEEL_DIAMETER_INCHES, FORWARD_CORRECTION_FACTOR),
-        lateral_pod(TRACKING_WHEEL_DIAMETER_INCHES, LATERAL_CORRECTION_FACTOR),
+      : forward_pod(TRACKING_WHEEL_DIAMETER_INCHES, FORWARD_CORRECTION_CLOCK,
+                    FORWARD_CORRECTION_COUNTERCLOCK),
+        lateral_pod(TRACKING_WHEEL_DIAMETER_INCHES, LATERAL_CORRECTION_CLOCK,
+                    LATERAL_CORRECTION_COUNTERCLOCK),
         delta_theta_degrees(0.0),
         theta_degrees(0.0),
         prev_theta_degrees(0.0),

@@ -21,7 +21,7 @@ void initialize() {
   forward_rot.reset_position();
   forward_rot.set_data_rate(5);
   imu.reset(true);
-  pros::delay(500);
+  pros::delay(750);
   pros::Task odom_task(std::bind(&Odom::odom_task_fn, &odom));
 }
 

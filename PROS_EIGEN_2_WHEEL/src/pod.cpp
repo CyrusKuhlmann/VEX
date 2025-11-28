@@ -22,5 +22,7 @@ void OdomPod::update(int sensor_centidegrees, double delta_theta_radians) {
   prev_correction_inches = correction_inches;
   raw_inches =
       (sensor_centidegrees / 100.0) * (wheel_diameter_inches * M_PI) / 360.0;
+  double correction_factor =
+      (delta_theta_radians >= 0) ? correction_clock : correction_counterclock;
   correction_inches += correction_factor * delta_theta_radians;
 }
