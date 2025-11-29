@@ -56,4 +56,7 @@ class Odom {
   void odom_task_fn();
   Eigen::Matrix<double, 2, 1> get_xy_inches();
   double get_theta_degrees();
+  double distance_to_point_inches(Eigen::Matrix<double, 2, 1> target_xy);
+  double angle_to_heading_degrees(double target_degrees);
+  double angle_to_point_degrees(Eigen::Matrix<double, 2, 1> target_xy);
 };

@@ -51,6 +51,25 @@ void Odom::debug(int i) {
 Eigen::Matrix<double, 2, 1> Odom::get_xy_inches() { return xy; }
 double Odom::get_theta_degrees() { return theta_degrees; }
 
+double Odom::angle_to_heading_degrees(double target_degrees) {
+  // normalize theta_degrees to [-180, 180)
+  double current_degrees = std::fmod(theta_degrees + 180.0, 360.0);
+  if (current_degrees < 0) {
+    current_degrees += 360.0;
+  }
+  current_degrees -= 180.0;
+  double raw_difference = target_degrees - current_degrees;
+  double shortest_angle;
+  if (raw_difference > 180.0) {
+    shortest_angle = raw_difference - 360.0;
+  } else if (raw_difference <= -180.0) {
+    shortest_angle = raw_difference + 360.0;
+  } else {
+    shortest_angle = raw_difference;
+  }
+  return shortest_angle;
+}
+
 void Odom::odom_task_fn() {
   int i = 0;
   while (true) {
