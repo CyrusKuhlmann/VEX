@@ -51,6 +51,8 @@ void autonomous() {
   actor.turn_by_degrees(-90.0, 50.0);
   pros::delay(1000);
   actor.drive_straight(12.0, 50.0);
+  pros::delay(350);
+  actor.turn_by_degrees(180.0, 50.0);
 }
 
 void opcontrol() {
