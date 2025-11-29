@@ -48,6 +48,9 @@ void Odom::debug(int i) {
                    forward_pod.get_corrected_inches());
 }
 
+Eigen::Matrix<double, 2, 1> Odom::get_xy_inches() { return xy; }
+double Odom::get_theta_degrees() { return theta_degrees; }
+
 void Odom::odom_task_fn() {
   int i = 0;
   while (true) {

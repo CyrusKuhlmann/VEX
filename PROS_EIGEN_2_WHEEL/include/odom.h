@@ -54,7 +54,6 @@ class Odom {
 
   // Methods
   void odom_task_fn();
-  double get_x_inches();
-  double get_y_inches();
+  Eigen::Matrix<double, 2, 1> get_xy_inches();
   double get_theta_degrees();
 };
