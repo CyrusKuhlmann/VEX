@@ -1,6 +1,8 @@
 #include "actor.h"
 
 void Actor::turn_by_degrees(double delta_degrees, double max_speed_percent) {
+  pros::lcd::print(2, "Turning by %.2f degrees", delta_degrees);
+
   // ----- PID GAIN CONSTANTS -----
   const double KP = 0.6267;
   const double KD = 0.0925;
@@ -206,39 +208,26 @@ void Actor::drive_straight(double target_distance_inches,
 
 void Actor::go_to_point(Eigen::Matrix<double, 2, 1> target_xy,
                         double max_speed_percent) {
-  Eigen::Matrix<double, 2, 1> start_xy = odom.get_xy_inches();
-  Eigen::Matrix<double, 2, 1> current_xy = start_xy;
-  Eigen::Matrix<double, 2, 1> desired_xy = target_xy;
-
-  Eigen::Matrix<double, 2, 1> to_target_vector;
-  double to_target_angle_degrees;
-  double angle_difference_degrees;
-
   double tries = 0;
 
-  while (tries < 3) {
-    current_xy = odom.get_xy_inches();
-    to_target_vector = desired_xy - current_xy;
+  while (tries < 1) {
+    double target_inches = odom.distance_to_point_inches(target_xy);
 
-    if (to_target_vector.norm() < 0.5) {
+    if (target_inches < 0.5) {
       break;
     }
 
-    to_target_angle_degrees =
-        atan2(to_target_vector(1, 0), to_target_vector(0, 0)) * (180.0 / M_PI);
-    angle_difference_degrees =
-        to_target_angle_degrees - odom.get_theta_degrees();
+    double angle_difference_degrees = odom.angle_to_point_degrees(target_xy);
 
     turn_by_degrees(angle_difference_degrees, max_speed_percent);
-    drive_straight(to_target_vector.norm(), max_speed_percent);
+    drive_straight(target_inches, max_speed_percent);
     tries++;
   }
 }
 
 void Actor::turn_to_degrees(double target_angle_degrees,
                             double max_speed_percent) {
-  double current_angle_degrees = odom.get_theta_degrees();
-  double angle_difference_degrees =
-      target_angle_degrees - current_angle_degrees;
-  turn_by_degrees(angle_difference_degrees, max_speed_percent);
+  pros::lcd::print(1, "Turning to %.2f degrees", target_angle_degrees);
+  turn_by_degrees(odom.angle_to_heading_degrees(target_angle_degrees),
+                  max_speed_percent);
 }

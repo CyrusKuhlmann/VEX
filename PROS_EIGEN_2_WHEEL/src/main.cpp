@@ -37,22 +37,24 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-  // const Eigen::Matrix<double, 2, 1> bl_corner(0.0, 0.0);
-  // const Eigen::Matrix<double, 2, 1> br_corner(48.0, 0.0);
-  // const Eigen::Matrix<double, 2, 1> tr_corner(48.0, 48.0);
-  // const Eigen::Matrix<double, 2, 1> tl_corner(0.0, 48.0);
-  // actor.go_to_point(tl_corner, 50.0);
-  // actor.go_to_point(br_corner, 50.0);
-  // actor.go_to_point(tr_corner, 50.0);
-  // actor.go_to_point(bl_corner, 50.0);
-  // actor.turn_to_degrees(0.0, 50.0);
-  actor.turn_by_degrees(90.0, 50.0);
-  pros::delay(1000);
-  actor.turn_by_degrees(-90.0, 50.0);
-  pros::delay(1000);
-  actor.drive_straight(12.0, 50.0);
-  pros::delay(350);
-  actor.turn_by_degrees(180.0, 50.0);
+  const Eigen::Matrix<double, 2, 1> bl_corner(0.0, 0.0);
+  const Eigen::Matrix<double, 2, 1> br_corner(48.0, 0.0);
+  const Eigen::Matrix<double, 2, 1> tr_corner(48.0, 48.0);
+  const Eigen::Matrix<double, 2, 1> tl_corner(0.0, 48.0);
+  actor.go_to_point(tl_corner, 50.0);
+  pros::lcd::print(0, "Reached TL Corner");
+
+  actor.go_to_point(br_corner, 50.0);
+  pros::lcd::print(0, "Reached BR Corner");
+
+  actor.go_to_point(tr_corner, 50.0);
+  pros::lcd::print(0, "Reached TR Corner");
+
+  actor.go_to_point(bl_corner, 50.0);
+  pros::lcd::print(0, "Reached BL Corner");
+
+  actor.turn_to_degrees(0.0, 50.0);
+  pros::lcd::print(0, "Finished");
 }
 
 void opcontrol() {

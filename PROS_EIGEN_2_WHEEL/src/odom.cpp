@@ -29,23 +29,23 @@ void Odom::update_xy() {
   delta_xy << lateral_pod.get_corrected_delta_inches(),
       forward_pod.get_corrected_delta_inches();
   Eigen::Matrix<double, 2, 2> R_average_theta;
-  double average_theta_radians = deg_to_rad(average_theta_degrees);
+  double average_theta_radians = deg_to_rad(-average_theta_degrees);
   R_average_theta << cos(average_theta_radians), -sin(average_theta_radians),
       sin(average_theta_radians), cos(average_theta_radians);
   xy = prev_xy + R_average_theta * delta_xy;
 }
 void Odom::debug(int i) {
-  pros::lcd::print(0, "X: %.2f in", xy(0, 0));
-  pros::lcd::print(1, "Y: %.2f in", xy(1, 0));
-  pros::lcd::print(2, "Theta: %.2f deg", theta_degrees);
-  // print out the raw values for rotation sensors
-  // pros::lcd::print(5, "L: %.2f in", s_l_corrected);
-  pros::lcd::print(3, "Uncorrected L: %.2f in", lateral_pod.get_raw_inches());
-  pros::lcd::print(4, "Corrected L: %.2f in",
-                   lateral_pod.get_corrected_inches());
-  pros::lcd::print(5, "Uncorrected F: %.2f in", forward_pod.get_raw_inches());
-  pros::lcd::print(6, "Corrected F: %.2f in",
-                   forward_pod.get_corrected_inches());
+  pros::lcd::print(5, "X: %.2f in", xy(0, 0));
+  pros::lcd::print(6, "Y: %.2f in", xy(1, 0));
+  pros::lcd::print(7, "Theta: %.2f deg", theta_degrees);
+  // // print out the raw values for rotation sensors
+  // // pros::lcd::print(5, "L: %.2f in", s_l_corrected);
+  // pros::lcd::print(3, "Uncorrected L: %.2f in",
+  // lateral_pod.get_raw_inches()); pros::lcd::print(4, "Corrected L: %.2f in",
+  //                  lateral_pod.get_corrected_inches());
+  // pros::lcd::print(5, "Uncorrected F: %.2f in",
+  // forward_pod.get_raw_inches()); pros::lcd::print(6, "Corrected F: %.2f in",
+  //                  forward_pod.get_corrected_inches());
 }
 
 Eigen::Matrix<double, 2, 1> Odom::get_xy_inches() { return xy; }
@@ -68,6 +68,17 @@ double Odom::angle_to_heading_degrees(double target_degrees) {
     shortest_angle = raw_difference;
   }
   return shortest_angle;
+}
+double Odom::distance_to_point_inches(Eigen::Matrix<double, 2, 1> target_xy) {
+  Eigen::Matrix<double, 2, 1> delta_xy = target_xy - xy;
+  return delta_xy.norm();
+}
+double Odom::angle_to_point_degrees(Eigen::Matrix<double, 2, 1> target_xy) {
+  Eigen::Matrix<double, 2, 1> delta_xy = target_xy - xy;
+  double target_degrees =
+      90 - rad_to_deg(atan2(delta_xy(1, 0), delta_xy(0, 0)));
+  pros::lcd::print(3, "Target degrees: %.2f", target_degrees);
+  return angle_to_heading_degrees(target_degrees);
 }
 
 void Odom::odom_task_fn() {
