@@ -13,7 +13,7 @@ void Actor::turn_by_degrees(double delta_degrees, double max_speed_percent) {
 
   const double TOLERANCE_DEGREES = 1.0;
 
-  const int DT_MS = 50;
+  const int DT_MS = 67;
   const double DT = DT_MS / 1000.0;
 
   // ----- SLEW RATE -----
@@ -114,7 +114,7 @@ void Actor::drive_straight(double target_distance_inches,
   const double TOLERANCE_INCHES = 1.0;
   const double TOLERANCE_HEADING_DEG = 1.0;
 
-  const double DT = 0.05;
+  const double DT = 0.067;
   const double MAX_SLEW = 3.0;  // % change allowed per loop
 
   int stable_cycles = 0;

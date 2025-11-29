@@ -87,7 +87,7 @@ void Odom::odom_task_fn() {
     update_raw_values();
     update_xy();
     debug(i);
-    pros::delay(50);
+    pros::delay(67);
     i++;
   }
 }

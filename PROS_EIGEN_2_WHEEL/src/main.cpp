@@ -28,7 +28,7 @@ void initialize() {
   forward_rot.reset_position();
   forward_rot.set_data_rate(5);
   imu.reset(true);
-  pros::delay(750);
+  pros::delay(1000);
   pros::Task odom_task(std::bind(&Odom::odom_task_fn, &odom));
 }
 
@@ -64,6 +64,6 @@ void opcontrol() {
                      127.0 * 100);
     right_motors.move(master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y) /
                       127.0 * 100);
-    pros::delay(20);
+    pros::delay(40);
   }
 }
